@@ -4,7 +4,10 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.extractor import check_sections, clean_text, extract_text_from_pdf
-from app.models import MatchResult
+from app.keywords import extract_keywords
+from app.models import MatchResult, MissingKeyword, SectionChecks
+from app.scorer import compute_scores
+from app.tips import generate_tips
 
 app = FastAPI(title="ATS Resume Matcher", version="1.0.0")
 
@@ -42,9 +45,9 @@ async def analyze(
     Raises:
         HTTPException 400: Invalid file type, file too large, or no extractable text.
     """
-    if resume.content_type not in ("application/pdf", "application/octet-stream"):
-        # Some browsers send octet-stream; also check filename extension
-        filename = resume.filename or ""
+    filename = resume.filename or ""
+    content_type = resume.content_type or ""
+    if content_type not in ("application/pdf", "application/octet-stream"):
         if not filename.lower().endswith(".pdf"):
             raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
 
@@ -61,12 +64,6 @@ async def analyze(
     cleaned_resume = clean_text(raw_text)
     cleaned_jd = clean_text(job_description)
     sections = check_sections(raw_text)
-
-    # Import here to avoid circular issues; heavy modules load lazily
-    from app.keywords import extract_keywords
-    from app.scorer import compute_scores
-    from app.tips import generate_tips
-
     jd_keywords = extract_keywords(cleaned_jd)
     scores = compute_scores(cleaned_resume, cleaned_jd, jd_keywords)
     tips = generate_tips(
@@ -74,8 +71,6 @@ async def analyze(
         missing_keywords=scores["missing_keywords"],
         section_checks=sections,
     )
-
-    from app.models import MissingKeyword, SectionChecks
 
     return MatchResult(
         overall_score=scores["overall_score"],
