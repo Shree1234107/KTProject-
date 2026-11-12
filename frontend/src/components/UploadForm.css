@@ -1,0 +1,145 @@
+.upload-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--gray-700);
+  letter-spacing: 0.01em;
+}
+
+.drop-zone {
+  border: 2px dashed var(--blue-200);
+  border-radius: var(--radius);
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  background: var(--blue-50);
+  text-align: center;
+}
+
+.drop-zone:hover, .drop-zone--active {
+  border-color: var(--blue-500);
+  background: var(--blue-100);
+}
+
+.drop-zone--filled {
+  border-color: var(--blue-500);
+  border-style: solid;
+  background: var(--blue-100);
+}
+
+.drop-zone__icon {
+  color: var(--blue-500);
+}
+
+.drop-zone__hint {
+  font-size: 0.875rem;
+  color: var(--gray-500);
+  line-height: 1.5;
+}
+
+.drop-zone__hint strong {
+  color: var(--blue-600);
+}
+
+.drop-zone__hint span {
+  font-size: 0.8rem;
+  color: var(--gray-400);
+}
+
+.drop-zone__name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--blue-700);
+}
+
+.jd-textarea {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1.5px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: var(--gray-700);
+  resize: vertical;
+  transition: border-color 0.15s;
+  background: var(--white);
+  line-height: 1.6;
+}
+
+.jd-textarea:focus {
+  outline: none;
+  border-color: var(--blue-400);
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+}
+
+.jd-textarea::placeholder {
+  color: var(--gray-400);
+}
+
+.char-hint {
+  font-size: 0.75rem;
+  color: var(--gray-400);
+  text-align: right;
+}
+
+.submit-btn {
+  align-self: flex-start;
+  background: var(--blue-600);
+  color: white;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0.7rem 1.75rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.submit-btn:hover:not(:disabled) {
+  background: var(--blue-700);
+}
+
+.submit-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.submit-btn:disabled {
+  background: var(--gray-400);
+  cursor: not-allowed;
+}
+
+.btn-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
