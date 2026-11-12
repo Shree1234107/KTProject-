@@ -1,0 +1,29 @@
+JANE DOE
+jane.doe@email.com | linkedin.com/in/janedoe | github.com/janedoe
+
+SUMMARY
+Software engineer with 4 years of experience building scalable web applications.
+Passionate about clean code, cloud infrastructure, and machine learning.
+
+EXPERIENCE
+Senior Software Engineer — Acme Corp (2021–Present)
+- Led migration of monolith to microservices using Docker and Kubernetes
+- Reduced API response time by 40% through Redis caching and query optimization
+- Built CI/CD pipelines with GitHub Actions; improved deploy frequency by 3x
+- Collaborated with cross-functional teams to deliver features on time
+
+Software Engineer — Beta Inc (2019–2021)
+- Developed REST APIs using Python and FastAPI serving 1M+ daily requests
+- Implemented real-time data processing with Apache Kafka and Spark
+- Wrote unit and integration tests achieving 90% code coverage
+
+EDUCATION
+B.S. Computer Science — State University, 2019
+GPA: 3.7/4.0 | Dean's List 2017–2019
+
+SKILLS
+Languages: Python, JavaScript, TypeScript, Go, SQL
+Frameworks: FastAPI, React, Node.js, Django
+Cloud: AWS (EC2, S3, Lambda, RDS), GCP, Docker, Kubernetes
+Databases: PostgreSQL, MongoDB, Redis
+Tools: Git, GitHub Actions, Terraform, Jira

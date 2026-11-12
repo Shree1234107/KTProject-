@@ -1,0 +1,24 @@
+Senior Backend Engineer — CloudScale Inc
+
+We are looking for a Senior Backend Engineer to join our growing platform team.
+You will design and build distributed systems that power our SaaS product.
+
+Requirements:
+- 4+ years of backend engineering experience
+- Strong proficiency in Python and Go
+- Experience with Kubernetes and Docker for container orchestration
+- Solid understanding of REST APIs and microservices architecture
+- Experience with PostgreSQL and Redis
+- Familiarity with AWS services (EC2, S3, Lambda)
+- CI/CD experience (GitHub Actions, Jenkins)
+- Strong knowledge of machine learning pipelines is a plus
+- Excellent communication and collaboration skills
+
+Nice to have:
+- Experience with Apache Kafka or message queues
+- Knowledge of Terraform for infrastructure as code
+- Contributions to open-source projects
+
+We value engineers who write clean, well-tested code and care deeply about reliability.
+Kubernetes experience is especially valued — our entire platform runs on Kubernetes.
+Knowledge of Docker and container best practices is required.
