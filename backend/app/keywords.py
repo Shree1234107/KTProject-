@@ -73,8 +73,11 @@ def extract_keywords(cleaned_jd: str) -> list[dict]:
     keyword_counts: dict[str, int] = {}
 
     def add_kw(kw: str, count: int) -> None:
-        kw = normalize_keyword(kw.lower(), aliases)
+        kw = normalize_keyword(kw.lower(), aliases).strip("- \t")
         if len(kw) < 2:
+            return
+        # Drop phrases that start with a non-alphanumeric character
+        if not kw[0].isalnum():
             return
         if kw not in keyword_counts:
             keyword_counts[kw] = count
