@@ -11,6 +11,28 @@ streamlit run app.py
 ```
 Data is stored locally in `data/tracker.db` (git-ignored, never commit it). To pick up a teammate's latest work, run `git pull` before each session.
 
+## Look and feel
+
+**Palette — whites and blues only:**
+
+| Variable | Hex | Use |
+|---|---|---|
+| `--c-white` | `#ffffff` | Page background |
+| `--c-bg-1` | `#f8fafc` | Sidebar, metric cards, form background |
+| `--c-bg-2` | `#f1f5f9` | Secondary surfaces |
+| `--c-border` | `#e2e8f0` | All borders and dividers |
+| `--c-blue-600` | `#2563eb` | Primary actions, matched chips, left-border accent |
+| `--c-blue-700` | `#1d4ed8` | Hover state for primary |
+| `--c-blue-900` | `#1e3a8a` | "Strong match" label text |
+| `--c-text` | `#0f1f3d` | Body text (WCAG AA contrast on white) |
+| `--c-text-sec` | `#475a7a` | Secondary labels, captions |
+
+**Where the CSS lives:** `tracker/style.css`. The file is loaded once by `tracker/theme.py::inject()`, which `app.py` calls at startup after `st.set_page_config`. The Resume Matcher tab (`tracker/ats/ui.py`) contains no inline `<style>` blocks or inline color values.
+
+**To change a color:** update the matching CSS variable in `tracker/style.css` section 0. All occurrences in the UI update automatically — no hunting through Python files.
+
+**Design rules:** square corners everywhere (`border-radius: 0`), 1 px solid borders in `--c-border`, flat (no shadows, no gradients), system-ui font stack (no network font load). Section headings are small uppercase labels. Metrics use tabular numbers. All alerts use a 3 px blue left border regardless of severity; errors show an "Error:" prefix in the message text.
+
 ## Test
 ```bash
 pytest

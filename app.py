@@ -4,10 +4,12 @@ import datetime as dt
 import pandas as pd
 import streamlit as st
 
-from tracker import analytics, db
+from tracker import analytics, db, theme
 from tracker.ats import ui as ats_ui
 
-st.set_page_config(page_title="Internship Tracker", page_icon="📋", layout="wide")
+st.set_page_config(page_title="Internship Tracker", layout="wide")
+theme.inject()
+
 conn = db.connect()
 
 
@@ -28,7 +30,7 @@ with st.sidebar:
     st.header("Sample & data")
     if st.button("Load sample data"):
         n = db.load_sample_data(conn)
-        st.success(f"Loaded {n} sample applications.")
+        st.info(f"Loaded {n} sample applications.")
         st.rerun()
 
     _df_check = db.load_applications(conn)
@@ -47,7 +49,7 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 # Main tabs
 # ---------------------------------------------------------------------------
-st.title("📋 Internship Tracker")
+st.title("Internship Tracker")
 tab_dash, tab_apps, tab_add, tab_rem, tab_ats = st.tabs(
     ["Dashboard", "Applications", "Add", "Reminders", "Resume Matcher"]
 )
@@ -70,13 +72,13 @@ with tab_dash:
         c[4].metric("Offers", s["offers"])
         left, right = st.columns(2)
         left.subheader("Pipeline")
-        left.bar_chart(analytics.status_counts(df))
+        left.bar_chart(analytics.status_counts(df), color="#2563eb")
         right.subheader("Applications per week")
         weekly = analytics.applications_per_week(df)
         if weekly.empty:
             right.caption("Add application dates to see this chart.")
         else:
-            right.line_chart(weekly)
+            right.line_chart(weekly, color="#2563eb")
         st.subheader("Where are responses coming from?")
         src = analytics.by_source(df)
         st.dataframe(src, use_container_width=True, hide_index=True) if not src.empty else st.caption("Add a source to applications to see this.")
@@ -120,7 +122,7 @@ with tab_apps:
         st.dataframe(view, use_container_width=True, hide_index=True)
 
         st.download_button(
-            "📥 Download CSV",
+            "Download CSV",
             data=view.to_csv(index=False).encode("utf-8"),
             file_name="applications.csv",
             mime="text/csv",
@@ -149,7 +151,7 @@ with tab_apps:
         b1, b2, _ = st.columns([1, 1, 6])
         if b1.button("Save"):
             if not new_company.strip() or not new_role.strip():
-                st.error("Company and role cannot be empty.")
+                st.error("Error: Company and role cannot be empty.")
             else:
                 db.update_application(
                     conn, int(choice),
@@ -198,7 +200,7 @@ with tab_add:
                 st.success("Added!")
                 st.rerun()
             except ValueError as e:
-                st.error(str(e))
+                st.error(f"Error: {e}")
 
 # ---------------------------------------------------------------------------
 # Reminders
@@ -212,7 +214,11 @@ with tab_rem:
     if not _has_any:
         st.info("No follow-ups scheduled.")
     else:
-        for section_key, label in [("overdue", "⚠️ Overdue"), ("due_today", "📅 Due today"), ("upcoming", "🔜 Upcoming (next 14 days)")]:
+        for section_key, label in [
+            ("overdue",   "Overdue"),
+            ("due_today", "Due today"),
+            ("upcoming",  "Upcoming (next 14 days)"),
+        ]:
             group = rem[section_key]
             count = len(group)
             st.subheader(f"{label} ({count})")
@@ -224,20 +230,20 @@ with tab_rem:
                     c1.write(f"**{row.company}** — {row.role}")
                     fu_str = str(row.follow_up_date)[:10] if pd.notna(row.follow_up_date) else "—"
                     c2.write(fu_str)
-                    if c3.button("✅ Done", key=f"done_{row.id}"):
+                    if c3.button("Done", key=f"done_{row.id}"):
                         db.update_application(conn, int(row.id), follow_up_date=None)
                         st.rerun()
-                    if c4.button("⏩ +3d", key=f"s3_{row.id}"):
+                    if c4.button("+3d", key=f"s3_{row.id}"):
                         new_fu = str((_today + dt.timedelta(days=3)))
                         db.update_application(conn, int(row.id), follow_up_date=new_fu)
                         st.rerun()
-                    if c5.button("⏩ +7d", key=f"s7_{row.id}"):
+                    if c5.button("+7d", key=f"s7_{row.id}"):
                         new_fu = str((_today + dt.timedelta(days=7)))
                         db.update_application(conn, int(row.id), follow_up_date=new_fu)
                         st.rerun()
 
         if not stale.empty:
-            st.subheader(f"🕐 No reply after 21+ days ({len(stale)})")
+            st.subheader(f"No reply after 21+ days ({len(stale)})")
             st.dataframe(
                 stale[["company", "role", "days_waiting"]].rename(columns={"days_waiting": "Days waiting"}),
                 use_container_width=True,

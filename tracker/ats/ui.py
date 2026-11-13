@@ -2,6 +2,7 @@
 
 Call :func:`render` from app.py inside the ``with tab_ats:`` block.
 This module handles all display logic; it never does text processing itself.
+All colors and layout are defined in tracker/style.css.
 """
 from __future__ import annotations
 
@@ -25,46 +26,18 @@ _SECTION_LABELS = [
 
 _INPUT_MODES = ("Upload PDF", "Paste text", "Try the demo")
 
-# Chip CSS classes: (category, matched) → class suffix
+# Chip CSS classes: (category, matched) → class name
+# CSS makes all matched chips look the same (solid blue) and all missing
+# chips look the same (white with blue border). Category is told apart
+# by its section heading, not by color.
 _CHIP_CLASSES: dict[tuple[str, bool], str] = {
-    ("Technical", True): "chip-m-tech",
+    ("Technical", True):      "chip-m-tech",
     ("Certifications", True): "chip-m-cert",
-    ("Soft skills", True): "chip-m-soft",
-    ("Technical", False): "chip-x-tech",
+    ("Soft skills", True):    "chip-m-soft",
+    ("Technical", False):     "chip-x-tech",
     ("Certifications", False): "chip-x-miss",
-    ("Soft skills", False): "chip-x-soft",
+    ("Soft skills", False):   "chip-x-soft",
 }
-
-_CSS = """
-<style>
-/* ---- keyword chips ---- */
-.chip {
-    display: inline-block;
-    padding: 3px 11px;
-    margin: 2px 3px 2px 0;
-    border-radius: 999px;
-    font-size: .82rem;
-    font-weight: 500;
-    line-height: 1.6;
-}
-/* matched */
-.chip-m-tech  { background: #dbeafe; color: #1d4ed8; }
-.chip-m-cert  { background: #ede9fe; color: #5b21b6; }
-.chip-m-soft  { background: #dcfce7; color: #166534; }
-/* missing */
-.chip-x-tech  { background: #fee2e2; color: #991b1b; }
-.chip-x-cert  { background: #fce7f3; color: #9d174d; }
-.chip-x-soft  { background: #ffedd5; color: #9a3412; }
-
-/* ---- large score display ---- */
-.ats-score-num  { font-size: 3.5rem; font-weight: 800; line-height: 1; margin: 0; }
-.ats-score-denom { font-size: .9rem; color: #64748b; margin: 0; }
-.ats-score-band  { font-size: 1.1rem; font-weight: 600; margin: .2rem 0 0; }
-.ats-score-green { color: #16a34a; }
-.ats-score-blue  { color: #2563eb; }
-.ats-score-orange { color: #ea580c; }
-</style>
-"""
 
 
 # ---------------------------------------------------------------------------
@@ -73,10 +46,10 @@ _CSS = """
 
 def _score_color_class(score: float) -> str:
     if score >= 70:
-        return "ats-score-green"
+        return "ats-score-strong"
     if score >= 50:
-        return "ats-score-blue"
-    return "ats-score-orange"
+        return "ats-score-decent"
+    return "ats-score-low"
 
 
 def _chip(text: str, css_class: str, suffix: str = "") -> str:
@@ -101,7 +74,7 @@ def _keyword_section(
         chips.append(_chip(kw, cls))
     for item in missing:
         cls = _CHIP_CLASSES.get((category, False), "chip-x-tech")
-        chips.append(_chip(item["keyword"], cls, f" ×{item['count']}"))
+        chips.append(_chip(item["keyword"], cls, f" x{item['count']}"))
 
     n_matched = len(matched)
     n_missing = len(missing)
@@ -112,8 +85,10 @@ def _keyword_section(
         parts.append(f"{n_missing} missing")
     summary = " · ".join(parts)
 
-    st.markdown(f"**{category}** <small style='color:#94a3b8'>({summary})</small>",
-                unsafe_allow_html=True)
+    st.markdown(
+        f"**{category}** <small class='cat-summary'>({summary})</small>",
+        unsafe_allow_html=True,
+    )
     st.markdown("".join(chips) or "—", unsafe_allow_html=True)
 
 
@@ -134,7 +109,7 @@ def _render_results(res: dict) -> None:
 
     with score_col:
         st.markdown(
-            f'<div style="text-align:center">'
+            f'<div class="ats-score-box">'
             f'<p class="ats-score-num {color_cls}">{score:.0f}</p>'
             f'<p class="ats-score-denom">/ 100</p>'
             f'<p class="ats-score-band {color_cls}">{_html.escape(band)}</p>'
@@ -149,21 +124,32 @@ def _render_results(res: dict) -> None:
         m2.metric("Content similarity", f"{res['cosine_similarity_score']:.0f}%")
         m3.metric("Word count", f"{res['resume_word_count']}")
 
-        # Section checks
+        # Section checks — "Present" / "Missing" labels, no emoji
         sec_cols = st.columns(4)
         for col, (key, label) in zip(sec_cols, _SECTION_LABELS):
-            icon = "✅" if res["section_checks"][key] else "❌"
-            col.markdown(f"{icon} {label}")
+            present = res["section_checks"][key]
+            cls = "section-present" if present else "section-missing"
+            status = "Present" if present else "Missing"
+            col.markdown(
+                f'<span class="{cls}">{status}</span> {label}',
+                unsafe_allow_html=True,
+            )
 
     # --- Tips ---
     tips = res["tips"] or ["No major issues flagged — nice match!"]
     st.subheader("Do these first")
     for tip in tips[:3]:
-        st.info(tip, icon="💡")
+        st.markdown(
+            f'<div class="ats-tip">{_html.escape(tip)}</div>',
+            unsafe_allow_html=True,
+        )
     if len(tips) > 3:
         with st.expander(f"See {len(tips) - 3} more tip{'s' if len(tips) - 3 > 1 else ''}"):
             for tip in tips[3:]:
-                st.info(tip, icon="💡")
+                st.markdown(
+                    f'<div class="ats-tip">{_html.escape(tip)}</div>',
+                    unsafe_allow_html=True,
+                )
 
     # --- Keywords by category ---
     st.subheader("Keywords by category")
@@ -172,14 +158,14 @@ def _render_results(res: dict) -> None:
         _keyword_section(cat, groups[cat]["matched"], groups[cat]["missing"])
 
     st.caption(
-        "⚠️ Only add skills you actually have — "
+        "Note: Only add skills you actually have — "
         "misrepresenting experience can backfire in technical interviews."
     )
 
     # --- Download ---
     md_report = report.build_report(res)
     st.download_button(
-        label="📥 Download report (.md)",
+        label="Download report (.md)",
         data=md_report.encode("utf-8"),
         file_name="ats_report.md",
         mime="text/markdown",
@@ -192,7 +178,6 @@ def _render_results(res: dict) -> None:
 
 def render() -> None:
     """Render the full Resume Matcher tab. Call this from app.py."""
-    st.markdown(_CSS, unsafe_allow_html=True)
     st.header("Resume Matcher")
     st.caption(
         "Score your resume against a job description — estimates only, not a real ATS. "
@@ -237,14 +222,17 @@ def render() -> None:
                 placeholder="Paste your full resume text here…",
             )
             if paste_text and len(paste_text.strip()) < ats.MIN_RESUME_CHARS:
-                st.warning(
-                    f"Paste at least {ats.MIN_RESUME_CHARS} characters of your resume."
+                st.markdown(
+                    f'<div class="ats-warn">Note: Paste at least '
+                    f'{ats.MIN_RESUME_CHARS} characters of your resume.</div>',
+                    unsafe_allow_html=True,
                 )
         else:
-            st.info(
-                "**Demo mode** — using the sample resume (Jane Doe, Software Engineer). "
-                "The sample job description has been loaded on the right; feel free to edit it.",
-                icon="🧪",
+            st.markdown(
+                '<div class="ats-note"><strong>Demo mode</strong> — using the sample resume '
+                "(Jane Doe, Software Engineer). The sample job description has been loaded "
+                "on the right; feel free to edit it.</div>",
+                unsafe_allow_html=True,
             )
 
     # Job description side
@@ -258,7 +246,10 @@ def render() -> None:
             label_visibility="collapsed",
         )
         if jd_text and len(jd_text.strip()) < ats.MIN_JD_CHARS:
-            st.warning(f"Paste at least {ats.MIN_JD_CHARS} characters.")
+            st.markdown(
+                f'<div class="ats-warn">Note: Paste at least {ats.MIN_JD_CHARS} characters.</div>',
+                unsafe_allow_html=True,
+            )
 
     # --- Action buttons ---
     btn_left, btn_right, _ = st.columns([1, 1, 4])
@@ -302,7 +293,7 @@ def render() -> None:
 
     # --- Show persisted error ---
     if err := st.session_state.get("ats_error"):
-        st.error(err)
+        st.error(f"Error: {err}")
 
     # --- Show persisted results ---
     if res := st.session_state.get("ats_result"):
