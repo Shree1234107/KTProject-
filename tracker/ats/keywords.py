@@ -4,6 +4,10 @@ Keywords come from a bundled, extendable skills list (``data/skills.json``),
 matched on whole words so "go" never matches inside "good". Aliases such as
 "k8s" or "js" are normalized to their canonical names. No spaCy model or
 network access is needed.
+
+Each returned keyword dict now carries a ``category`` field
+(``"Technical"``, ``"Certifications"``, or ``"Soft skills"``) so the UI can
+group and colour-code chips without touching the logic layer.
 """
 from __future__ import annotations
 
@@ -15,6 +19,13 @@ from pathlib import Path
 
 _DATA_PATH = Path(__file__).parent / "data" / "skills.json"
 _WORD_CHARS = r"a-z0-9+#"
+
+# Map skills.json section keys → display category names
+_SECTION_TO_CATEGORY: dict[str, str] = {
+    "tech_skills": "Technical",
+    "soft_skills": "Soft skills",
+    "certifications": "Certifications",
+}
 
 
 @lru_cache(maxsize=1)
@@ -43,6 +54,15 @@ def _alias_forms(skills: dict) -> dict[str, list[str]]:
     return forms
 
 
+def _term_category_map(skills: dict) -> dict[str, str]:
+    """Return a mapping of canonical term (lowercased) → display category."""
+    mapping: dict[str, str] = {}
+    for section_key, category in _SECTION_TO_CATEGORY.items():
+        for term in skills.get(section_key, []):
+            mapping[term.lower()] = category
+    return mapping
+
+
 def _count(text: str, term: str, extra: list[str]) -> int:
     return sum(len(_phrase_regex(t).findall(text)) for t in [term, *extra])
 
@@ -50,16 +70,13 @@ def _count(text: str, term: str, extra: list[str]) -> int:
 def extract_keywords(cleaned_jd: str) -> list[dict]:
     """Extract skills from a cleaned (lowercased) job description.
 
-    Returns a list of ``{"keyword", "count"}`` dicts sorted by count (desc)
-    then alphabetically. A longer skill that merely contains a shorter one
-    ("apache kafka" vs "kafka") is kept only once, as the shorter term.
+    Returns a list of ``{"keyword", "count", "category"}`` dicts sorted by
+    count (desc) then alphabetically. A longer skill that merely contains a
+    shorter one ("apache kafka" vs "kafka") is kept only once, as the shorter.
     """
     skills = load_skills()
-    all_terms = {
-        t.lower()
-        for key in ("tech_skills", "soft_skills", "certifications")
-        for t in skills.get(key, [])
-    }
+    cat_map = _term_category_map(skills)
+    all_terms = set(cat_map.keys())
     forms = _alias_forms(skills)
 
     counts: dict[str, int] = {}
@@ -68,7 +85,7 @@ def extract_keywords(cleaned_jd: str) -> list[dict]:
         if n:
             counts[term] = n
 
-    # Drop "apache kafka" when "kafka" is also a keyword, "rest apis" when "rest" is.
+    # Drop "apache kafka" when "kafka" is also a keyword, etc.
     for longer in sorted(counts, key=len, reverse=True):
         for shorter in counts:
             if shorter != longer and _phrase_regex(shorter).search(longer):
@@ -77,25 +94,42 @@ def extract_keywords(cleaned_jd: str) -> list[dict]:
                 break
 
     return [
-        {"keyword": kw, "count": n}
+        {
+            "keyword": kw,
+            "count": n,
+            "category": cat_map.get(kw, "Technical"),
+        }
         for kw, n in sorted(counts.items(), key=lambda x: (-x[1], x[0]))
     ]
 
 
 def keywords_in_text(
     resume_text: str, keywords: list[dict]
-) -> tuple[list[str], list[dict]]:
+) -> tuple[list[dict], list[dict]]:
     """Split JD keywords into (matched, missing) based on the resume text.
 
-    Missing items keep their JD ``count`` so they can be ranked by importance.
+    Args:
+        resume_text: Cleaned, lowercased resume text.
+        keywords: List of ``{"keyword", "count", "category"}`` dicts (category
+            is optional and defaults to ``"Technical"`` for backward compat).
+
+    Returns:
+        A tuple ``(matched, missing)`` where:
+        - ``matched`` is a list of ``{"keyword", "category"}`` dicts.
+        - ``missing`` is a list of ``{"keyword", "count", "category"}`` dicts
+          sorted by count descending (importance ranking).
     """
     forms = _alias_forms(load_skills())
-    matched: list[str] = []
+    matched: list[dict] = []
     missing: list[dict] = []
     for item in keywords:
         kw = item["keyword"]
+        category = item.get("category", "Technical")
         hit = any(_phrase_regex(t).search(resume_text) for t in [kw, *forms.get(kw, [])])
-        (matched if hit else missing).append(kw if hit else item)
+        if hit:
+            matched.append({"keyword": kw, "category": category})
+        else:
+            missing.append(item)
     return matched, missing
 
 

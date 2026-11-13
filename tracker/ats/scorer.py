@@ -49,8 +49,8 @@ def compute_scores(
         - ``overall_score`` (float 0-100)
         - ``keyword_coverage_score`` (float 0-100)
         - ``cosine_similarity_score`` (float 0-100)
-        - ``matched_keywords`` (list[str])
-        - ``missing_keywords`` (list[dict] with keyword/count, sorted by count desc)
+        - ``matched_keywords`` (list[dict] with keyword/category)
+        - ``missing_keywords`` (list[dict] with keyword/count/category, sorted by count desc)
     """
     matched, missing = keywords_in_text(cleaned_resume, jd_keywords)
 
