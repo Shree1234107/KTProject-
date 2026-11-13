@@ -3,13 +3,13 @@ import datetime as dt
 
 import streamlit as st
 
-from tracker import analytics, db
+from tracker import analytics, ats, db
 
 st.set_page_config(page_title="Internship Tracker", page_icon="📋", layout="wide")
 conn = db.connect()
 
 st.title("📋 Internship Tracker")
-tab_dash, tab_apps, tab_add = st.tabs(["Dashboard", "Applications", "Add"])
+tab_dash, tab_apps, tab_add, tab_ats = st.tabs(["Dashboard", "Applications", "Add", "Resume Matcher"])
 
 df = db.load_applications(conn)
 
@@ -89,3 +89,59 @@ with tab_add:
                 st.rerun()
             except ValueError as e:
                 st.error(str(e))
+
+with tab_ats:
+    st.markdown(
+        """<style>
+        .chip{display:inline-block;padding:3px 12px;margin:3px 4px 3px 0;border-radius:999px;font-size:.85rem}
+        .chip.ok{background:#dcfce7;color:#166534}.chip.miss{background:#ffedd5;color:#9a3412}
+        </style>""",
+        unsafe_allow_html=True,
+    )
+    st.header("Resume Matcher")
+    st.caption("Upload a resume PDF and paste a job description. Estimates only, not a real ATS. Nothing is stored.")
+    left, right = st.columns(2)
+    pdf = left.file_uploader("Resume (PDF, max 5 MB)", type="pdf")
+    use_demo = left.checkbox("Use the demo resume instead")
+    if "ats_jd" not in st.session_state:
+        st.session_state["ats_jd"] = ""
+    if right.button("Load demo job description"):
+        st.session_state["ats_jd"] = ats.sample_job_description()
+    jd_text = right.text_area("Job description", key="ats_jd", height=260)
+
+    if st.button("Analyze resume", type="primary"):
+        try:
+            if use_demo:
+                result = ats.analyze_text(ats.sample_resume_text(), jd_text)
+            elif pdf is not None:
+                result = ats.analyze(pdf.getvalue(), jd_text)
+            else:
+                raise ValueError("Upload a resume PDF, or tick the demo resume.")
+            st.session_state["ats_result"] = result
+        except ValueError as e:
+            st.session_state.pop("ats_result", None)
+            st.error(str(e))
+
+    res = st.session_state.get("ats_result")
+    if res:
+        st.divider()
+        m = st.columns(3)
+        m[0].metric("Overall match", f"{res['overall_score']:.0f} / 100")
+        m[1].metric("Keyword coverage", f"{res['keyword_coverage_score']:.0f}%")
+        m[2].metric("Content similarity", f"{res['cosine_similarity_score']:.0f}%")
+        st.progress(min(int(res["overall_score"]), 100))
+        st.subheader("Sections found")
+        sc = st.columns(4)
+        for col, (name, label) in zip(sc, [("summary", "Summary"), ("experience", "Experience"), ("education", "Education"), ("skills", "Skills")]):
+            col.write(("✅ " if res["section_checks"][name] else "❌ ") + label)
+        k1, k2 = st.columns(2)
+        k1.subheader(f"Matched ({len(res['matched_keywords'])})")
+        k1.markdown("".join(f'<span class="chip ok">{k}</span>' for k in res["matched_keywords"]) or "None", unsafe_allow_html=True)
+        k2.subheader(f"Missing ({len(res['missing_keywords'])})")
+        k2.markdown(
+            "".join(f'<span class="chip miss">{i["keyword"]} ×{i["count"]}</span>' for i in res["missing_keywords"]) or "None",
+            unsafe_allow_html=True,
+        )
+        st.subheader("Improvement tips")
+        for tip in res["tips"] or ["Nothing to flag. Nice match."]:
+            st.info(tip)

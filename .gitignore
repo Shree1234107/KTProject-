@@ -38,3 +38,6 @@ dist/
 # Uploads (never store)
 uploads/
 *.pdf.tmp
+
+# Tracker database - never commit
+data/*.db
