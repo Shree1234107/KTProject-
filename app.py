@@ -22,8 +22,8 @@ def _to_date(ts):
 
 
 st.title("📋 Internship Tracker")
-tab_dash, tab_apps, tab_add, tab_ats = st.tabs(
-    ["Dashboard", "Applications", "Add", "Resume Matcher"]
+tab_dash, tab_apps, tab_add, tab_rem, tab_ats = st.tabs(
+    ["Dashboard", "Applications", "Add", "Reminders", "Resume Matcher"]
 )
 
 df = db.load_applications(conn)
@@ -110,6 +110,7 @@ with tab_apps:
         new_deadline    = ea.date_input("Deadline",          value=_to_date(cur.get("deadline")),       key=f"dl{choice}")
         new_ref_name    = eb.text_input("Referral name",     cur.get("referral_name", ""), key=f"rn{choice}")
         new_ref_contact = ea.text_input("Referral contact",  cur.get("referral_contact", ""), key=f"rc{choice}")
+        new_follow_up   = eb.date_input("Follow-up date",    value=_to_date(cur.get("follow_up_date")), key=f"fu{choice}")
         new_notes       = st.text_area("Notes",              cur.get("notes", ""),         key=f"no{choice}")
 
         b1, b2, _ = st.columns([1, 1, 6])
@@ -128,6 +129,7 @@ with tab_apps:
                     deadline=str(new_deadline) if new_deadline else None,
                     referral_name=new_ref_name,
                     referral_contact=new_ref_contact,
+                    follow_up_date=str(new_follow_up) if new_follow_up else None,
                     notes=new_notes,
                 )
                 st.rerun()
@@ -150,6 +152,7 @@ with tab_add:
         deadline    = a.date_input("Deadline", value=None)
         ref_name    = b.text_input("Referral name (optional)")
         ref_contact = a.text_input("Referral contact (optional)")
+        follow_up   = b.date_input("Follow-up date (optional)", value=None)
         notes       = st.text_area("Notes")
         if st.form_submit_button("Add application"):
             try:
@@ -157,11 +160,56 @@ with tab_add:
                     conn, company, role, location, status, applied, deadline, source, notes,
                     referral_name=ref_name,
                     referral_contact=ref_contact,
+                    follow_up_date=str(follow_up) if follow_up else None,
                 )
                 st.success("Added!")
                 st.rerun()
             except ValueError as e:
                 st.error(str(e))
+
+# ---------------------------------------------------------------------------
+# Reminders
+# ---------------------------------------------------------------------------
+with tab_rem:
+    _today = dt.date.today()
+    rem = analytics.reminders(df, today=str(_today))
+    stale = analytics.stale_applications(df, today=str(_today))
+
+    _has_any = any(not v.empty for v in rem.values()) or not stale.empty
+    if not _has_any:
+        st.info("No follow-ups scheduled.")
+    else:
+        for section_key, label in [("overdue", "⚠️ Overdue"), ("due_today", "📅 Due today"), ("upcoming", "🔜 Upcoming (next 14 days)")]:
+            group = rem[section_key]
+            count = len(group)
+            st.subheader(f"{label} ({count})")
+            if group.empty:
+                st.caption("None.")
+            else:
+                for row in group.itertuples():
+                    c1, c2, c3, c4, c5 = st.columns([3, 2, 1, 1, 1])
+                    c1.write(f"**{row.company}** — {row.role}")
+                    fu_str = str(row.follow_up_date)[:10] if pd.notna(row.follow_up_date) else "—"
+                    c2.write(fu_str)
+                    if c3.button("✅ Done", key=f"done_{row.id}"):
+                        db.update_application(conn, int(row.id), follow_up_date=None)
+                        st.rerun()
+                    if c4.button("⏩ +3d", key=f"s3_{row.id}"):
+                        new_fu = str((_today + dt.timedelta(days=3)))
+                        db.update_application(conn, int(row.id), follow_up_date=new_fu)
+                        st.rerun()
+                    if c5.button("⏩ +7d", key=f"s7_{row.id}"):
+                        new_fu = str((_today + dt.timedelta(days=7)))
+                        db.update_application(conn, int(row.id), follow_up_date=new_fu)
+                        st.rerun()
+
+        if not stale.empty:
+            st.subheader(f"🕐 No reply after 21+ days ({len(stale)})")
+            st.dataframe(
+                stale[["company", "role", "days_waiting"]].rename(columns={"days_waiting": "Days waiting"}),
+                use_container_width=True,
+                hide_index=True,
+            )
 
 # ---------------------------------------------------------------------------
 # Resume Matcher

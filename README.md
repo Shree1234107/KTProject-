@@ -29,7 +29,7 @@ Status key: **Built** = works today, **Planned** = agreed in the project plan, *
 | Dashboard | Totals, active count, response rate, interview rate and offers; pipeline by status; applications per week; responses by source; deadlines in the next 14 days | Built |
 | Referral tracking | Referrer name and contact per application; compare referred vs. cold response rates | Built |
 | Interview stages | Log each round (recruiter screen, online assessment, technical, behavioral, take-home, onsite/final) with date and outcome (Scheduled, Passed, Failed, Pending) | Planned |
-| Follow-up reminders | Follow-up date per application; a Reminders tab listing overdue, due today and upcoming items, with mark done and snooze 3 or 7 days; flags applications with no reply after 21+ days | Planned |
+| Follow-up reminders | Follow-up date per application; a Reminders tab listing overdue, due today and upcoming items, with mark done and snooze 3 or 7 days; flags applications with no reply after 21+ days | Built |
 | Response-rate visuals | Funnel (Applied, Responded, Interviewed, Offer), response rate by source, referred vs. cold, pass rate per stage, applications per week | Planned |
 | Sample data | A button that loads demo data so a fresh clone has something to show | Proposed |
 | ICS export | Download reminders as a calendar file to import by hand | Proposed |
@@ -68,7 +68,7 @@ To add skills or aliases, edit `tracker/ats/data/skills.json`.
 
 ### Up next
 1. **Referral tracking** *(built)*: referrer name and contact on each application, plus a referred vs. cold comparison of response and interview rates on the Dashboard.
-2. **Follow-up reminders** *(planned)*: a follow-up date per application and a Reminders tab with Overdue, Due today and Upcoming groups, mark done, snooze 3 or 7 days, and a "no reply after 21+ days" flag.
+2. **Follow-up reminders** *(built)*: a follow-up date per application and a Reminders tab with Overdue, Due today and Upcoming groups, mark done, snooze 3 or 7 days, and a "no reply after 21+ days" flag.
 3. **Edit every field** of an application, not only status and notes, with validation.
 4. **CSV export** of the filtered Applications view.
 5. **Sample data** *(proposed)*: a "Load sample data" button so a fresh clone shows a populated dashboard, and a confirmed "Clear all data" that never touches real entries.

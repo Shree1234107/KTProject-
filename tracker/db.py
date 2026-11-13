@@ -11,7 +11,7 @@ STATUSES = ["Wishlist", "Applied", "OA/Screen", "Interview", "Offer", "Rejected"
 COLUMNS = [
     "id", "company", "role", "location", "status",
     "date_applied", "deadline", "source", "notes",
-    "referral_name", "referral_contact",
+    "referral_name", "referral_contact", "follow_up_date",
 ]
 
 SCHEMA = """
@@ -26,13 +26,15 @@ CREATE TABLE IF NOT EXISTS applications (
     source TEXT DEFAULT '',
     notes TEXT DEFAULT '',
     referral_name TEXT DEFAULT '',
-    referral_contact TEXT DEFAULT ''
+    referral_contact TEXT DEFAULT '',
+    follow_up_date TEXT
 )
 """
 
 _MIGRATIONS = [
     ("referral_name",    "ALTER TABLE applications ADD COLUMN referral_name TEXT DEFAULT ''"),
     ("referral_contact", "ALTER TABLE applications ADD COLUMN referral_contact TEXT DEFAULT ''"),
+    ("follow_up_date",   "ALTER TABLE applications ADD COLUMN follow_up_date TEXT"),
 ]
 
 
@@ -57,7 +59,8 @@ def connect(path=None):
 
 def add_application(conn, company, role, location="", status="Applied",
                     date_applied=None, deadline=None, source="", notes="",
-                    referral_name="", referral_contact=""):
+                    referral_name="", referral_contact="",
+                    follow_up_date=None):
     if status not in STATUSES:
         raise ValueError(f"Invalid status: {status}")
     if not company.strip() or not role.strip():
@@ -65,14 +68,15 @@ def add_application(conn, company, role, location="", status="Applied",
     cur = conn.execute(
         "INSERT INTO applications "
         "(company, role, location, status, date_applied, deadline, source, notes, "
-        "referral_name, referral_contact) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "referral_name, referral_contact, follow_up_date) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
         (
             company.strip(), role.strip(), location, status,
             str(date_applied) if date_applied else None,
             str(deadline) if deadline else None,
             source, notes,
             referral_name, referral_contact,
+            str(follow_up_date) if follow_up_date else None,
         ),
     )
     conn.commit()
@@ -104,7 +108,7 @@ def delete_application(conn, app_id):
 
 def load_applications(conn):
     df = pd.read_sql_query("SELECT * FROM applications ORDER BY id DESC", conn)
-    for col in ("date_applied", "deadline"):
+    for col in ("date_applied", "deadline", "follow_up_date"):
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors="coerce")
     return df

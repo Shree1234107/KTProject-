@@ -81,10 +81,8 @@ def test_referral_add_and_edit(conn):
 
 
 def test_referral_comparison_basic(conn):
-    # 2 referred: 1 Interview (responded + interviewed), 1 Applied (neither)
     db.add_application(conn, "R1", "Eng", status="Interview", referral_name="Bob")
     db.add_application(conn, "R2", "Eng", status="Applied",   referral_name="Carol")
-    # 2 cold: 1 Rejected (responded), 1 Applied (neither)
     db.add_application(conn, "C1", "Eng", status="Rejected")
     db.add_application(conn, "C2", "Eng", status="Applied")
 
@@ -111,3 +109,82 @@ def test_update_application_validates_company_role(conn):
         db.update_application(conn, i, company="")
     with pytest.raises(ValueError, match="Role"):
         db.update_application(conn, i, role="   ")
+
+
+# ---------------------------------------------------------------------------
+# Feature 2: follow-up reminders
+# ---------------------------------------------------------------------------
+
+def _make_reminder_df():
+    today = pd.Timestamp("2026-06-01")
+    return pd.DataFrame({
+        "id":             [1,            2,            3],
+        "company":        ["A",          "B",          "C"],
+        "role":           ["R",          "R",          "R"],
+        "status":         ["Applied",    "Applied",    "Applied"],
+        "follow_up_date": [
+            today - pd.Timedelta(days=1),
+            today,
+            today + pd.Timedelta(days=5),
+        ],
+    })
+
+
+def test_reminders_groups():
+    df = _make_reminder_df()
+    result = analytics.reminders(df, today="2026-06-01")
+    assert len(result["overdue"]) == 1 and result["overdue"].iloc[0]["company"] == "A"
+    assert len(result["due_today"]) == 1 and result["due_today"].iloc[0]["company"] == "B"
+    assert len(result["upcoming"]) == 1 and result["upcoming"].iloc[0]["company"] == "C"
+
+
+def test_reminders_ignores_rejected_withdrawn():
+    today = pd.Timestamp("2026-06-01")
+    df = pd.DataFrame({
+        "id": [1, 2],
+        "company": ["X", "Y"],
+        "role": ["R", "R"],
+        "status": ["Rejected", "Withdrawn"],
+        "follow_up_date": [today - pd.Timedelta(days=1), today - pd.Timedelta(days=1)],
+    })
+    result = analytics.reminders(df, today="2026-06-01")
+    assert result["overdue"].empty
+    assert result["due_today"].empty
+    assert result["upcoming"].empty
+
+
+def test_reminders_no_column():
+    df = pd.DataFrame({"id": [1], "company": ["X"], "status": ["Applied"]})
+    result = analytics.reminders(df, today="2026-06-01")
+    assert result["overdue"].empty and result["due_today"].empty and result["upcoming"].empty
+
+
+def test_stale_applications():
+    today = pd.Timestamp("2026-06-01")
+    df = pd.DataFrame({
+        "id": [1, 2],
+        "company": ["A", "B"],
+        "role": ["R", "R"],
+        "status": ["Applied", "Applied"],
+        "date_applied": [
+            today - pd.Timedelta(days=25),
+            today - pd.Timedelta(days=10),
+        ],
+    })
+    result = analytics.stale_applications(df, today="2026-06-01", days=21)
+    assert len(result) == 1
+    assert result.iloc[0]["company"] == "A"
+
+
+def test_stale_has_days_waiting_column():
+    today = pd.Timestamp("2026-06-01")
+    df = pd.DataFrame({
+        "id": [1],
+        "company": ["A"],
+        "role": ["R"],
+        "status": ["Applied"],
+        "date_applied": [today - pd.Timedelta(days=30)],
+    })
+    result = analytics.stale_applications(df, today="2026-06-01", days=21)
+    assert "days_waiting" in result.columns
+    assert result.iloc[0]["days_waiting"] == 30

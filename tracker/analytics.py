@@ -3,7 +3,6 @@ import pandas as pd
 
 from .db import STATUSES
 
-# Statuses meaning the company responded beyond a plain rejection-less silence
 ADVANCED = {"OA/Screen", "Interview", "Offer"}
 SUBMITTED = set(STATUSES) - {"Wishlist"}
 
@@ -11,7 +10,7 @@ SUBMITTED = set(STATUSES) - {"Wishlist"}
 def summary(df):
     submitted = df[df["status"].isin(SUBMITTED)]
     n = len(submitted)
-    advanced = submitted["status"].isin(ADVANCED | {"Rejected"}).sum()  # got any response
+    advanced = submitted["status"].isin(ADVANCED | {"Rejected"}).sum()
     return {
         "total": len(df),
         "submitted": n,
@@ -53,14 +52,6 @@ def upcoming_deadlines(df, today=None, days=14):
 
 
 def referral_comparison(df: pd.DataFrame) -> dict:
-    """Compare response and interview rates for referred vs. cold applications.
-
-    Uses the same SUBMITTED and ADVANCED definitions as summary().
-    'Referred' = referral_name column is non-empty.
-
-    Returns {"referred": {count, submitted, response_rate, interview_rate},
-             "cold":     {count, submitted, response_rate, interview_rate}}.
-    """
     zero = {"count": 0, "submitted": 0, "response_rate": 0.0, "interview_rate": 0.0}
     if df.empty or "referral_name" not in df.columns:
         return {"referred": dict(zero), "cold": dict(zero)}
@@ -80,3 +71,42 @@ def referral_comparison(df: pd.DataFrame) -> dict:
             "interview_rate": (interviewed / n) if n else 0.0,
         }
     return result
+
+
+def reminders(df: pd.DataFrame, today=None) -> dict[str, pd.DataFrame]:
+    """Group applications with a follow_up_date into overdue/due_today/upcoming.
+
+    Skips Rejected and Withdrawn rows. Upcoming = within the next 14 days.
+    Returns {"overdue": df, "due_today": df, "upcoming": df}.
+    """
+    empty = pd.DataFrame()
+    if "follow_up_date" not in df.columns:
+        return {"overdue": empty, "due_today": empty, "upcoming": empty}
+
+    today_ts = pd.Timestamp(today or pd.Timestamp.today().normalize())
+    active = df[~df["status"].isin({"Rejected", "Withdrawn"})]
+    active = active.dropna(subset=["follow_up_date"])
+
+    overdue   = active[active["follow_up_date"] <  today_ts]
+    due_today = active[active["follow_up_date"] == today_ts]
+    upcoming  = active[
+        (active["follow_up_date"] >  today_ts) &
+        (active["follow_up_date"] <= today_ts + pd.Timedelta(days=14))
+    ]
+    return {"overdue": overdue, "due_today": due_today, "upcoming": upcoming}
+
+
+def stale_applications(df: pd.DataFrame, today=None, days: int = 21) -> pd.DataFrame:
+    """Return Applied rows with no reply after `days` days.
+
+    Adds a `days_waiting` column (integer).
+    """
+    if "date_applied" not in df.columns:
+        return pd.DataFrame()
+
+    today_ts = pd.Timestamp(today or pd.Timestamp.today().normalize())
+    applied = df[df["status"] == "Applied"].dropna(subset=["date_applied"])
+    cutoff = today_ts - pd.Timedelta(days=days)
+    stale = applied[applied["date_applied"] <= cutoff].copy()
+    stale["days_waiting"] = (today_ts - stale["date_applied"]).dt.days.astype(int)
+    return stale.sort_values("days_waiting", ascending=False)
