@@ -50,3 +50,33 @@ def upcoming_deadlines(df, today=None, days=14):
     d = d[d["status"].isin({"Wishlist", "Applied"})]
     d = d[(d["deadline"] >= today) & (d["deadline"] <= today + pd.Timedelta(days=days))]
     return d.sort_values("deadline")[["company", "role", "deadline", "status"]]
+
+
+def referral_comparison(df: pd.DataFrame) -> dict:
+    """Compare response and interview rates for referred vs. cold applications.
+
+    Uses the same SUBMITTED and ADVANCED definitions as summary().
+    'Referred' = referral_name column is non-empty.
+
+    Returns {"referred": {count, submitted, response_rate, interview_rate},
+             "cold":     {count, submitted, response_rate, interview_rate}}.
+    """
+    zero = {"count": 0, "submitted": 0, "response_rate": 0.0, "interview_rate": 0.0}
+    if df.empty or "referral_name" not in df.columns:
+        return {"referred": dict(zero), "cold": dict(zero)}
+
+    referred_mask = df["referral_name"].fillna("").str.strip() != ""
+    result = {}
+    for label, mask in [("referred", referred_mask), ("cold", ~referred_mask)]:
+        group = df[mask]
+        submitted = group[group["status"].isin(SUBMITTED)]
+        n = len(submitted)
+        responded = submitted["status"].isin(ADVANCED | {"Rejected"}).sum()
+        interviewed = submitted["status"].isin({"Interview", "Offer"}).sum()
+        result[label] = {
+            "count": len(group),
+            "submitted": n,
+            "response_rate": (responded / n) if n else 0.0,
+            "interview_rate": (interviewed / n) if n else 0.0,
+        }
+    return result

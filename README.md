@@ -27,7 +27,7 @@ Status key: **Built** = works today, **Planned** = agreed in the project plan, *
 | Log applications | Company, role, location, source, status, dates, notes | Built |
 | Edit, filter and delete | Search by company or role, filter by status, update a status or notes, delete an entry | Built |
 | Dashboard | Totals, active count, response rate, interview rate and offers; pipeline by status; applications per week; responses by source; deadlines in the next 14 days | Built |
-| Referral tracking | Referrer name and contact per application; compare referred vs. cold response rates | Planned |
+| Referral tracking | Referrer name and contact per application; compare referred vs. cold response rates | Built |
 | Interview stages | Log each round (recruiter screen, online assessment, technical, behavioral, take-home, onsite/final) with date and outcome (Scheduled, Passed, Failed, Pending) | Planned |
 | Follow-up reminders | Follow-up date per application; a Reminders tab listing overdue, due today and upcoming items, with mark done and snooze 3 or 7 days; flags applications with no reply after 21+ days | Planned |
 | Response-rate visuals | Funnel (Applied, Responded, Interviewed, Offer), response rate by source, referred vs. cold, pass rate per stage, applications per week | Planned |
@@ -57,6 +57,28 @@ Score a resume against a job description and get specific tips. Runs locally; no
 | Link scores to applications | Save a match score against a tracked application | Proposed |
 
 To add skills or aliases, edit `tracker/ats/data/skills.json`.
+
+## Roadmap
+
+### In the app today
+- **Dashboard:** totals, active count, response rate, interview rate, offers; pipeline by status; applications per week; responses by source; deadlines in the next 14 days.
+- **Applications:** list with status filter and company/role search; update a status or notes; delete.
+- **Add:** form with company, role, location, source, status, date applied, deadline and notes.
+- **Resume Matcher:** upload a PDF, paste text or use the demo; match score and label, keywords by category, section check, tips, report download.
+
+### Up next
+1. **Referral tracking** *(built)*: referrer name and contact on each application, plus a referred vs. cold comparison of response and interview rates on the Dashboard.
+2. **Follow-up reminders** *(planned)*: a follow-up date per application and a Reminders tab with Overdue, Due today and Upcoming groups, mark done, snooze 3 or 7 days, and a "no reply after 21+ days" flag.
+3. **Edit every field** of an application, not only status and notes, with validation.
+4. **CSV export** of the filtered Applications view.
+5. **Sample data** *(proposed)*: a "Load sample data" button so a fresh clone shows a populated dashboard, and a confirmed "Clear all data" that never touches real entries.
+
+### Later
+- **Interview stages** *(planned)*: log each round with date and outcome.
+- **Response-rate visuals** *(planned)*: funnel, rate by source, pass rate per stage.
+- **ICS export** *(proposed)*: download reminders as a calendar file.
+- **Resume Matcher + tracker link** *(proposed)*: save a match score against an application.
+- Open decisions from the plan: branches with PRs or pushing straight to `main`, Plotly or built-in charts, and any extra fields (salary, job link, recruiter email).
 
 ## Layout
 - `app.py` — Streamlit UI (Dashboard / Applications / Add / Resume Matcher tabs)

@@ -8,7 +8,11 @@ DB_PATH = Path(__file__).resolve().parent.parent / "data" / "tracker.db"
 
 STATUSES = ["Wishlist", "Applied", "OA/Screen", "Interview", "Offer", "Rejected", "Withdrawn"]
 
-COLUMNS = ["id", "company", "role", "location", "status", "date_applied", "deadline", "source", "notes"]
+COLUMNS = [
+    "id", "company", "role", "location", "status",
+    "date_applied", "deadline", "source", "notes",
+    "referral_name", "referral_contact",
+]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS applications (
@@ -20,9 +24,25 @@ CREATE TABLE IF NOT EXISTS applications (
     date_applied TEXT,
     deadline TEXT,
     source TEXT DEFAULT '',
-    notes TEXT DEFAULT ''
+    notes TEXT DEFAULT '',
+    referral_name TEXT DEFAULT '',
+    referral_contact TEXT DEFAULT ''
 )
 """
+
+_MIGRATIONS = [
+    ("referral_name",    "ALTER TABLE applications ADD COLUMN referral_name TEXT DEFAULT ''"),
+    ("referral_contact", "ALTER TABLE applications ADD COLUMN referral_contact TEXT DEFAULT ''"),
+]
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    for _col, sql in _MIGRATIONS:
+        try:
+            conn.execute(sql)
+        except sqlite3.OperationalError:
+            pass
+    conn.commit()
 
 
 def connect(path=None):
@@ -31,21 +51,29 @@ def connect(path=None):
     conn = sqlite3.connect(p)
     conn.row_factory = sqlite3.Row
     conn.execute(SCHEMA)
+    _migrate(conn)
     return conn
 
 
 def add_application(conn, company, role, location="", status="Applied",
-                    date_applied=None, deadline=None, source="", notes=""):
+                    date_applied=None, deadline=None, source="", notes="",
+                    referral_name="", referral_contact=""):
     if status not in STATUSES:
         raise ValueError(f"Invalid status: {status}")
     if not company.strip() or not role.strip():
         raise ValueError("Company and role are required")
     cur = conn.execute(
-        "INSERT INTO applications (company, role, location, status, date_applied, deadline, source, notes) "
-        "VALUES (?,?,?,?,?,?,?,?)",
-        (company.strip(), role.strip(), location, status,
-         str(date_applied) if date_applied else None,
-         str(deadline) if deadline else None, source, notes),
+        "INSERT INTO applications "
+        "(company, role, location, status, date_applied, deadline, source, notes, "
+        "referral_name, referral_contact) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (
+            company.strip(), role.strip(), location, status,
+            str(date_applied) if date_applied else None,
+            str(deadline) if deadline else None,
+            source, notes,
+            referral_name, referral_contact,
+        ),
     )
     conn.commit()
     return cur.lastrowid
@@ -58,6 +86,10 @@ def update_application(conn, app_id, **fields):
         raise ValueError(f"Unknown fields: {bad}")
     if "status" in fields and fields["status"] not in STATUSES:
         raise ValueError(f"Invalid status: {fields['status']}")
+    if "company" in fields and not str(fields["company"]).strip():
+        raise ValueError("Company cannot be empty")
+    if "role" in fields and not str(fields["role"]).strip():
+        raise ValueError("Role cannot be empty")
     if not fields:
         return
     sets = ", ".join(f"{k}=?" for k in fields)
@@ -73,5 +105,6 @@ def delete_application(conn, app_id):
 def load_applications(conn):
     df = pd.read_sql_query("SELECT * FROM applications ORDER BY id DESC", conn)
     for col in ("date_applied", "deadline"):
-        df[col] = pd.to_datetime(df[col], errors="coerce")
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce")
     return df
