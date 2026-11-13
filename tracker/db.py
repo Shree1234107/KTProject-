@@ -1,4 +1,5 @@
 """SQLite storage for internship applications."""
+import datetime as _dt
 import sqlite3
 from pathlib import Path
 
@@ -11,7 +12,7 @@ STATUSES = ["Wishlist", "Applied", "OA/Screen", "Interview", "Offer", "Rejected"
 COLUMNS = [
     "id", "company", "role", "location", "status",
     "date_applied", "deadline", "source", "notes",
-    "referral_name", "referral_contact", "follow_up_date",
+    "referral_name", "referral_contact", "follow_up_date", "is_sample",
 ]
 
 SCHEMA = """
@@ -27,7 +28,8 @@ CREATE TABLE IF NOT EXISTS applications (
     notes TEXT DEFAULT '',
     referral_name TEXT DEFAULT '',
     referral_contact TEXT DEFAULT '',
-    follow_up_date TEXT
+    follow_up_date TEXT,
+    is_sample INTEGER NOT NULL DEFAULT 0
 )
 """
 
@@ -35,6 +37,7 @@ _MIGRATIONS = [
     ("referral_name",    "ALTER TABLE applications ADD COLUMN referral_name TEXT DEFAULT ''"),
     ("referral_contact", "ALTER TABLE applications ADD COLUMN referral_contact TEXT DEFAULT ''"),
     ("follow_up_date",   "ALTER TABLE applications ADD COLUMN follow_up_date TEXT"),
+    ("is_sample",        "ALTER TABLE applications ADD COLUMN is_sample INTEGER NOT NULL DEFAULT 0"),
 ]
 
 
@@ -60,7 +63,7 @@ def connect(path=None):
 def add_application(conn, company, role, location="", status="Applied",
                     date_applied=None, deadline=None, source="", notes="",
                     referral_name="", referral_contact="",
-                    follow_up_date=None):
+                    follow_up_date=None, is_sample=False):
     if status not in STATUSES:
         raise ValueError(f"Invalid status: {status}")
     if not company.strip() or not role.strip():
@@ -68,8 +71,8 @@ def add_application(conn, company, role, location="", status="Applied",
     cur = conn.execute(
         "INSERT INTO applications "
         "(company, role, location, status, date_applied, deadline, source, notes, "
-        "referral_name, referral_contact, follow_up_date) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        "referral_name, referral_contact, follow_up_date, is_sample) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             company.strip(), role.strip(), location, status,
             str(date_applied) if date_applied else None,
@@ -77,6 +80,7 @@ def add_application(conn, company, role, location="", status="Applied",
             source, notes,
             referral_name, referral_contact,
             str(follow_up_date) if follow_up_date else None,
+            1 if is_sample else 0,
         ),
     )
     conn.commit()
@@ -112,3 +116,57 @@ def load_applications(conn):
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors="coerce")
     return df
+
+
+def load_sample_data(conn) -> int:
+    """Insert ~15 realistic sample applications. Returns the count inserted."""
+    today = _dt.date.today()
+    td = _dt.timedelta
+
+    rows = [
+        # company, role, location, status, days_ago, source, ref_name, ref_contact, fu_offset
+        ("Google",      "SWE Intern",             "Mountain View, CA",   "Interview", 45, "LinkedIn",    "Jane Smith",  "jane@google.com",   -1),
+        ("Meta",        "Data Scientist Intern",   "Menlo Park, CA",      "Applied",   25, "LinkedIn",    "",            "",                   7),
+        ("Amazon",      "SDE Intern",              "Seattle, WA",         "OA/Screen", 35, "Referral",    "Bob Lee",     "bob@amazon.com",    -3),
+        ("Microsoft",   "PM Intern",               "Redmond, WA",         "Offer",     60, "Career fair", "",            "",                None),
+        ("Apple",       "iOS Intern",              "Cupertino, CA",       "Rejected",  50, "LinkedIn",    "",            "",                None),
+        ("Netflix",     "Backend Intern",          "Los Gatos, CA",       "Applied",   22, "Referral",    "Alice Chen",  "alice@netflix.com",  3),
+        ("Stripe",      "Payments Intern",         "San Francisco, CA",   "Applied",   30, "LinkedIn",    "",            "",                  -5),
+        ("Airbnb",      "Frontend Intern",         "San Francisco, CA",   "Withdrawn", 40, "LinkedIn",    "",            "",                None),
+        ("Spotify",     "ML Intern",               "New York, NY",        "Applied",   21, "Website",     "",            "",                   0),
+        ("Uber",        "Data Eng Intern",         "San Francisco, CA",   "Interview", 55, "Referral",    "Dave Kim",    "dave@uber.com",      1),
+        ("Figma",       "Product Design Intern",   "San Francisco, CA",   "Interview", 38, "Career fair", "",            "",                   5),
+        ("Palantir",    "Forward Deploy Intern",   "New York, NY",        "OA/Screen", 28, "Referral",    "Emma Wang",   "emma@palantir.com", -7),
+        ("Databricks",  "Data Infra Intern",       "San Francisco, CA",   "Applied",   21, "LinkedIn",    "",            "",                   0),
+        ("LinkedIn",    "SWE Intern",              "Sunnyvale, CA",       "Applied",   10, "Website",     "",            "",                  14),
+        ("Cloudflare",  "Network Intern",          "Austin, TX",          "Wishlist",   0, "LinkedIn",    "",            "",                None),
+    ]
+
+    count = 0
+    for company, role, location, status, days_ago, source, ref_name, ref_contact, fu_offset in rows:
+        date_applied = (today - td(days=days_ago)) if days_ago > 0 else None
+        follow_up = str(today + td(days=fu_offset)) if fu_offset is not None else None
+        add_application(
+            conn, company, role, location, status,
+            date_applied=date_applied,
+            source=source,
+            notes="[sample]",
+            referral_name=ref_name,
+            referral_contact=ref_contact,
+            follow_up_date=follow_up,
+            is_sample=True,
+        )
+        count += 1
+    return count
+
+
+def clear_sample_data(conn) -> None:
+    """Remove all sample rows (is_sample=1)."""
+    conn.execute("DELETE FROM applications WHERE is_sample=1")
+    conn.commit()
+
+
+def clear_all_data(conn) -> None:
+    """Remove every application row."""
+    conn.execute("DELETE FROM applications")
+    conn.commit()

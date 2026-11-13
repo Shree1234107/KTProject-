@@ -31,7 +31,7 @@ Status key: **Built** = works today, **Planned** = agreed in the project plan, *
 | Interview stages | Log each round (recruiter screen, online assessment, technical, behavioral, take-home, onsite/final) with date and outcome (Scheduled, Passed, Failed, Pending) | Planned |
 | Follow-up reminders | Follow-up date per application; a Reminders tab listing overdue, due today and upcoming items, with mark done and snooze 3 or 7 days; flags applications with no reply after 21+ days | Built |
 | Response-rate visuals | Funnel (Applied, Responded, Interviewed, Offer), response rate by source, referred vs. cold, pass rate per stage, applications per week | Planned |
-| Sample data | A button that loads demo data so a fresh clone has something to show | Proposed |
+| Sample data | A button that loads demo data so a fresh clone has something to show | Built |
 | ICS export | Download reminders as a calendar file to import by hand | Proposed |
 
 Statuses: Wishlist, Applied, OA/Screen, Interview, Offer, Rejected, Withdrawn.
@@ -69,9 +69,9 @@ To add skills or aliases, edit `tracker/ats/data/skills.json`.
 ### Up next
 1. **Referral tracking** *(built)*: referrer name and contact on each application, plus a referred vs. cold comparison of response and interview rates on the Dashboard.
 2. **Follow-up reminders** *(built)*: a follow-up date per application and a Reminders tab with Overdue, Due today and Upcoming groups, mark done, snooze 3 or 7 days, and a "no reply after 21+ days" flag.
-3. **Edit every field** of an application, not only status and notes, with validation.
-4. **CSV export** of the filtered Applications view.
-5. **Sample data** *(proposed)*: a "Load sample data" button so a fresh clone shows a populated dashboard, and a confirmed "Clear all data" that never touches real entries.
+3. **Edit every field** *(built)*: full edit form covering all fields with validation.
+4. **CSV export** *(built)*: download the filtered Applications view as a CSV.
+5. **Sample data** *(built)*: "Load sample data" button in the sidebar populates 15 realistic entries; "Remove sample data" and confirmed "Clear ALL data" buttons are also there.
 
 ### Later
 - **Interview stages** *(planned)*: log each round with date and outcome.
@@ -81,7 +81,7 @@ To add skills or aliases, edit `tracker/ats/data/skills.json`.
 - Open decisions from the plan: branches with PRs or pushing straight to `main`, Plotly or built-in charts, and any extra fields (salary, job link, recruiter email).
 
 ## Layout
-- `app.py` — Streamlit UI (Dashboard / Applications / Add / Resume Matcher tabs)
+- `app.py` — Streamlit UI (Dashboard / Applications / Add / Reminders / Resume Matcher tabs)
 - `tracker/db.py` — SQLite storage and CRUD
 - `tracker/analytics.py` — dashboard metrics (pure pandas, tested)
 - `tracker/ats/` — Resume Matcher

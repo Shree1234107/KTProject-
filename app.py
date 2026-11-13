@@ -21,6 +21,32 @@ def _to_date(ts):
     return ts.date() if hasattr(ts, "date") else ts
 
 
+# ---------------------------------------------------------------------------
+# Sidebar — sample data controls
+# ---------------------------------------------------------------------------
+with st.sidebar:
+    st.header("Sample & data")
+    if st.button("Load sample data"):
+        n = db.load_sample_data(conn)
+        st.success(f"Loaded {n} sample applications.")
+        st.rerun()
+
+    _df_check = db.load_applications(conn)
+    if "is_sample" in _df_check.columns and _df_check["is_sample"].astype(bool).any():
+        n_sample = int(_df_check["is_sample"].astype(bool).sum())
+        if st.button(f"Remove sample data ({n_sample} rows)"):
+            db.clear_sample_data(conn)
+            st.rerun()
+
+    st.divider()
+    _confirm = st.checkbox("I understand this cannot be undone")
+    if st.button("Clear ALL data", disabled=not _confirm):
+        db.clear_all_data(conn)
+        st.rerun()
+
+# ---------------------------------------------------------------------------
+# Main tabs
+# ---------------------------------------------------------------------------
 st.title("📋 Internship Tracker")
 tab_dash, tab_apps, tab_add, tab_rem, tab_ats = st.tabs(
     ["Dashboard", "Applications", "Add", "Reminders", "Resume Matcher"]
@@ -92,6 +118,13 @@ with tab_apps:
             m = view["company"].str.contains(q, case=False) | view["role"].str.contains(q, case=False)
             view = view[m]
         st.dataframe(view, use_container_width=True, hide_index=True)
+
+        st.download_button(
+            "📥 Download CSV",
+            data=view.to_csv(index=False).encode("utf-8"),
+            file_name="applications.csv",
+            mime="text/csv",
+        )
 
         st.divider()
         st.subheader("Edit or delete")

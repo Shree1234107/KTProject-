@@ -188,3 +188,32 @@ def test_stale_has_days_waiting_column():
     result = analytics.stale_applications(df, today="2026-06-01", days=21)
     assert "days_waiting" in result.columns
     assert result.iloc[0]["days_waiting"] == 30
+
+
+# ---------------------------------------------------------------------------
+# Feature 3: sample data
+# ---------------------------------------------------------------------------
+
+def test_load_sample_data(conn):
+    n = db.load_sample_data(conn)
+    assert n >= 15
+    df = db.load_applications(conn)
+    assert len(df) == n
+    assert df["is_sample"].astype(bool).all()
+
+
+def test_clear_sample_data(conn):
+    db.add_application(conn, "RealCo", "Eng")  # a real row
+    db.load_sample_data(conn)
+    db.clear_sample_data(conn)
+    df = db.load_applications(conn)
+    assert not df["is_sample"].astype(bool).any(), "sample rows still present"
+    assert len(df) == 1  # real row survived
+    assert df.iloc[0]["company"] == "RealCo"
+
+
+def test_clear_all_data(conn):
+    db.add_application(conn, "X", "Y")
+    db.load_sample_data(conn)
+    db.clear_all_data(conn)
+    assert db.load_applications(conn).empty
