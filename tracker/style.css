@@ -1,0 +1,611 @@
+/* ================================================================
+ * tracker/style.css — KTProject Internship Tracker visual theme
+ * White and blue only. Square. Flat. No shadows. No gradients.
+ * Tested against Streamlit 1.67.0
+ *
+ * To change a color, update the CSS variable in section 0 below.
+ * Data-testid selectors (e.g. [data-testid="stButton"]) are stable
+ * across minor Streamlit releases. Avoid targeting st-emotion-cache-*
+ * class names — those hash on each build and are not stable.
+ * ================================================================ */
+
+/* ------------------------------------------------------------------ */
+/* 0. Palette — CSS variables                                          */
+/* ------------------------------------------------------------------ */
+:root {
+  /* Whites */
+  --c-white:  #ffffff;
+  --c-bg-1:   #f8fafc;
+  --c-bg-2:   #f1f5f9;
+  --c-border: #e2e8f0;
+
+  /* Blues */
+  --c-blue-50:  #eff6ff;
+  --c-blue-100: #dbeafe;
+  --c-blue-200: #bfdbfe;
+  --c-blue-400: #60a5fa;
+  --c-blue-600: #2563eb;
+  --c-blue-700: #1d4ed8;
+  --c-blue-900: #1e3a8a;
+
+  /* Text — WCAG AA on white: #0f1f3d contrast ~12:1, #475a7a ~5:1 */
+  --c-text:     #0f1f3d;
+  --c-text-sec: #475a7a;
+}
+
+/* ------------------------------------------------------------------ */
+/* 1. Base reset: square corners and system font                       */
+/* ------------------------------------------------------------------ */
+
+/* Square corners on every element — intentional, app-wide rule */
+*, *::before, *::after {
+  border-radius: 0 !important;
+}
+
+html, body,
+[data-testid="stAppViewContainer"],
+[data-testid="stSidebar"],
+button, input, textarea, select,
+[data-baseweb="select"],
+[data-baseweb="input"] {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* 2. Typography                                                        */
+/* ------------------------------------------------------------------ */
+
+h1 {
+  font-size: 1.55rem !important;
+  font-weight: 800 !important;
+  color: var(--c-text) !important;
+  letter-spacing: -0.01em;
+}
+
+/* Section headers as small uppercase labels */
+h2 {
+  font-size: 1.0rem !important;
+  font-weight: 700 !important;
+  color: var(--c-text) !important;
+  letter-spacing: 0.01em;
+}
+
+h3 {
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  color: var(--c-text-sec) !important;
+  border-bottom: 1px solid var(--c-border);
+  padding-bottom: 5px !important;
+  margin-bottom: 10px !important;
+}
+
+/* Tabular numbers for metrics and scores */
+[data-testid="stMetricValue"],
+.ats-score-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ */
+/* 3. Layout — main area and sidebar                                   */
+/* ------------------------------------------------------------------ */
+
+[data-testid="stAppViewContainer"] {
+  background: var(--c-white);
+}
+
+/* Sidebar: light background, right border */
+[data-testid="stSidebar"] {
+  border-right: 1px solid var(--c-border) !important;
+}
+
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {
+  font-size: 0.65rem !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  color: var(--c-text-sec) !important;
+  border-bottom: 1px solid var(--c-border) !important;
+  padding-bottom: 4px !important;
+}
+
+hr {
+  border: none !important;
+  border-top: 1px solid var(--c-border) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* 4. Tabs                                                             */
+/* ------------------------------------------------------------------ */
+
+[data-baseweb="tab-list"] {
+  background: transparent !important;
+  border-bottom: 1px solid var(--c-border) !important;
+  gap: 0 !important;
+}
+
+[data-baseweb="tab"] {
+  background: transparent !important;
+  border: none !important;
+  border-right: 1px solid var(--c-border) !important;
+  padding: 8px 18px !important;
+  font-size: 0.82rem !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.03em !important;
+  color: var(--c-text-sec) !important;
+  transition: background 150ms, color 150ms;
+}
+
+[data-baseweb="tab"]:hover {
+  background: var(--c-blue-50) !important;
+  color: var(--c-blue-700) !important;
+}
+
+[data-baseweb="tab"][aria-selected="true"] {
+  color: var(--c-blue-700) !important;
+  font-weight: 600 !important;
+}
+
+/* Active tab bottom-line indicator */
+[data-baseweb="tab-highlight"] {
+  background: var(--c-blue-600) !important;
+  height: 2px !important;
+}
+
+[data-baseweb="tab-border"] {
+  background: transparent !important;
+}
+
+/* Tab content panel fade-in */
+[data-testid="stTabsContent"] > div[role="tabpanel"] {
+  animation: fade-up 250ms ease-out both;
+}
+
+/* ------------------------------------------------------------------ */
+/* 5. Buttons                                                          */
+/* ------------------------------------------------------------------ */
+
+button {
+  transition: background-color 150ms, border-color 150ms, color 150ms !important;
+}
+
+/* Primary buttons: solid blue */
+[data-testid^="stBaseButton"][kind="primary"],
+[data-testid="stFormSubmitButton"] button {
+  background: var(--c-blue-600) !important;
+  border: 1px solid var(--c-blue-600) !important;
+  color: var(--c-white) !important;
+}
+
+[data-testid^="stBaseButton"][kind="primary"]:hover,
+[data-testid="stFormSubmitButton"] button:hover {
+  background: var(--c-blue-700) !important;
+  border-color: var(--c-blue-700) !important;
+}
+
+/* Secondary buttons: white with blue border */
+[data-testid^="stBaseButton"][kind="secondary"] {
+  background: var(--c-white) !important;
+  border: 1px solid var(--c-blue-200) !important;
+  color: var(--c-blue-700) !important;
+}
+
+[data-testid^="stBaseButton"][kind="secondary"]:hover {
+  background: var(--c-blue-50) !important;
+  border-color: var(--c-blue-400) !important;
+}
+
+/* Focus outline: visible on keyboard nav */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--c-blue-600) !important;
+  outline-offset: 2px !important;
+}
+
+/* Download buttons share secondary style */
+[data-testid="stDownloadButton"] button {
+  background: var(--c-white) !important;
+  border: 1px solid var(--c-blue-200) !important;
+  color: var(--c-blue-700) !important;
+}
+
+[data-testid="stDownloadButton"] button:hover {
+  background: var(--c-blue-50) !important;
+  border-color: var(--c-blue-400) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* 6. Text inputs, textareas, date inputs                             */
+/* ------------------------------------------------------------------ */
+
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input,
+[data-testid="stDateInput"] input {
+  border: 1px solid var(--c-border) !important;
+  background: var(--c-white) !important;
+  color: var(--c-text) !important;
+  transition: border-color 150ms !important;
+}
+
+[data-testid="stTextInput"] input:focus,
+[data-testid="stNumberInput"] input:focus,
+[data-testid="stDateInput"] input:focus {
+  border-color: var(--c-blue-600) !important;
+  box-shadow: none !important;
+}
+
+[data-testid="stTextArea"] textarea {
+  border: 1px solid var(--c-border) !important;
+  background: var(--c-white) !important;
+  color: var(--c-text) !important;
+  transition: border-color 150ms !important;
+}
+
+[data-testid="stTextArea"] textarea:focus {
+  border-color: var(--c-blue-600) !important;
+  box-shadow: none !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* 7. Selectbox and multiselect                                        */
+/* ------------------------------------------------------------------ */
+
+[data-baseweb="select"] > div:first-child,
+[data-baseweb="input"] > div {
+  border: 1px solid var(--c-border) !important;
+  background: var(--c-white) !important;
+  transition: border-color 150ms !important;
+}
+
+[data-baseweb="select"]:focus-within > div:first-child,
+[data-baseweb="input"]:focus-within > div {
+  border-color: var(--c-blue-600) !important;
+  box-shadow: none !important;
+}
+
+/* Dropdown popup menu */
+[data-baseweb="popover"] {
+  border: 1px solid var(--c-border) !important;
+  box-shadow: none !important;
+}
+
+[data-baseweb="menu"] {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+[role="option"]:hover,
+[role="option"][aria-selected="true"] {
+  background: var(--c-blue-50) !important;
+  color: var(--c-blue-700) !important;
+}
+
+/* Multiselect tags */
+[data-baseweb="tag"] {
+  background: var(--c-blue-100) !important;
+  color: var(--c-blue-900) !important;
+  border: 1px solid var(--c-blue-200) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* 8. File uploader                                                    */
+/* ------------------------------------------------------------------ */
+
+[data-testid="stFileUploadDropzone"] {
+  border: 1px dashed var(--c-blue-400) !important;
+  background: var(--c-blue-50) !important;
+  transition: border-color 150ms, background 150ms !important;
+}
+
+[data-testid="stFileUploadDropzone"]:hover {
+  border-color: var(--c-blue-600) !important;
+  background: var(--c-blue-100) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* 9. Metrics                                                          */
+/* ------------------------------------------------------------------ */
+
+[data-testid="stMetric"] {
+  border: 1px solid var(--c-border);
+  background: var(--c-bg-1);
+  padding: 12px 16px !important;
+}
+
+[data-testid="stMetricLabel"] {
+  font-size: 0.7rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  color: var(--c-text-sec) !important;
+}
+
+[data-testid="stMetricValue"] {
+  font-size: 1.5rem !important;
+  font-weight: 700 !important;
+  color: var(--c-blue-700) !important;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-testid="stMetricDelta"] {
+  color: var(--c-blue-400) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* 10. Alerts — all types become a blue left-border note box          */
+/* ------------------------------------------------------------------ */
+
+[data-testid="stAlert"],
+[data-baseweb="notification"] {
+  background: var(--c-blue-50) !important;
+  border: 1px solid var(--c-blue-100) !important;
+  border-left: 3px solid var(--c-blue-600) !important;
+  color: var(--c-text) !important;
+  box-shadow: none !important;
+}
+
+[data-testid="stAlert"] svg,
+[data-baseweb="notification"] svg {
+  fill: var(--c-blue-600) !important;
+  color: var(--c-blue-600) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* 11. Expanders                                                       */
+/* ------------------------------------------------------------------ */
+
+[data-testid="stExpander"] {
+  border: 1px solid var(--c-border) !important;
+  background: var(--c-white) !important;
+  box-shadow: none !important;
+}
+
+[data-testid="stExpander"] summary {
+  font-size: 0.85rem !important;
+  color: var(--c-text-sec) !important;
+  padding: 10px 14px !important;
+}
+
+[data-testid="stExpander"] summary:hover {
+  background: var(--c-blue-50) !important;
+  color: var(--c-blue-700) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* 12. Progress bar                                                    */
+/* ------------------------------------------------------------------ */
+
+[data-testid="stProgress"] > div {
+  background: var(--c-blue-100) !important;
+  overflow: hidden;
+}
+
+[data-testid="stProgress"] > div > div {
+  background: var(--c-blue-600) !important;
+  animation: bar-grow 500ms ease-out both;
+  transform-origin: left center;
+}
+
+/* ------------------------------------------------------------------ */
+/* 13. Data tables                                                     */
+/* ------------------------------------------------------------------ */
+
+[data-testid="stDataFrame"] {
+  border: 1px solid var(--c-border) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* 14. Forms                                                           */
+/* ------------------------------------------------------------------ */
+
+[data-testid="stForm"] {
+  border: 1px solid var(--c-border) !important;
+  background: var(--c-bg-1) !important;
+  padding: 20px !important;
+  box-shadow: none !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* 15. Resume Matcher custom components                                */
+/* ------------------------------------------------------------------ */
+
+/* Score display block */
+.ats-score-box {
+  padding: 12px 0 8px;
+  animation: fade-up 250ms ease-out 0ms both;
+}
+
+.ats-score-num {
+  font-size: 3.4rem !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.ats-score-denom {
+  font-size: .85rem;
+  color: var(--c-text-sec);
+  margin: 0 !important;
+}
+
+/* Score band badge — inline square box */
+.ats-score-band {
+  display: inline-block;
+  font-size: .82rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 2px 10px;
+  margin-top: .35rem;
+  border: 1px solid;
+}
+
+/* Three band levels — blues only, no green/red/orange */
+.ats-score-strong.ats-score-num { color: var(--c-blue-900); }
+.ats-score-decent.ats-score-num { color: var(--c-blue-700); }
+.ats-score-low.ats-score-num    { color: var(--c-blue-400); }
+
+.ats-score-strong.ats-score-band {
+  color: var(--c-blue-900);
+  background: var(--c-blue-100);
+  border-color: var(--c-blue-200);
+}
+.ats-score-decent.ats-score-band {
+  color: var(--c-blue-700);
+  background: var(--c-blue-50);
+  border-color: var(--c-blue-200);
+}
+.ats-score-low.ats-score-band {
+  color: var(--c-blue-600);
+  background: var(--c-white);
+  border-color: var(--c-blue-200);
+}
+
+/* Section checks: "Present" / "Missing" inline labels */
+.section-present {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  margin-right: 5px;
+  background: var(--c-blue-600);
+  color: var(--c-white);
+  border: 1px solid var(--c-blue-600);
+}
+
+.section-missing {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  margin-right: 5px;
+  background: var(--c-white);
+  color: var(--c-blue-400);
+  border: 1px solid var(--c-blue-200);
+}
+
+/* Tip boxes — blue left-border notes */
+.ats-tip {
+  background: var(--c-blue-50);
+  border: 1px solid var(--c-blue-100);
+  border-left: 3px solid var(--c-blue-600);
+  padding: 10px 14px;
+  margin: 5px 0;
+  font-size: 0.88rem;
+  color: var(--c-text);
+  animation: fade-up 250ms ease-out 100ms both;
+}
+
+/* Demo mode and inline notes */
+.ats-note {
+  background: var(--c-blue-50);
+  border: 1px solid var(--c-blue-100);
+  border-left: 3px solid var(--c-blue-400);
+  padding: 10px 14px;
+  margin: 6px 0;
+  font-size: 0.88rem;
+  color: var(--c-text);
+}
+
+/* Inline warnings for short input */
+.ats-warn {
+  background: var(--c-bg-1);
+  border: 1px solid var(--c-border);
+  border-left: 3px solid var(--c-blue-600);
+  padding: 7px 12px;
+  margin: 4px 0;
+  font-size: 0.82rem;
+  color: var(--c-text-sec);
+}
+
+/* Keyword chips — square tags */
+.chip {
+  display: inline-block;
+  padding: 2px 8px;
+  margin: 2px 3px 2px 0;
+  font-size: .78rem;
+  font-weight: 500;
+  line-height: 1.6;
+  border: 1px solid;
+  transition: opacity 150ms;
+  animation: fade-up 200ms ease-out 180ms both;
+}
+
+.chip:hover {
+  opacity: 0.75;
+}
+
+/* All matched chips: solid blue, white text */
+.chip-m-tech,
+.chip-m-cert,
+.chip-m-soft {
+  background: var(--c-blue-600);
+  color: var(--c-white);
+  border-color: var(--c-blue-600);
+}
+
+.chip-m-tech:hover,
+.chip-m-cert:hover,
+.chip-m-soft:hover {
+  background: var(--c-blue-700);
+  border-color: var(--c-blue-700);
+}
+
+/* All missing chips: white with blue border */
+.chip-x-tech,
+.chip-x-miss,
+.chip-x-soft {
+  background: var(--c-white);
+  color: var(--c-blue-700);
+  border-color: var(--c-blue-200);
+}
+
+.chip-x-tech:hover,
+.chip-x-miss:hover,
+.chip-x-soft:hover {
+  background: var(--c-blue-50);
+  border-color: var(--c-blue-400);
+}
+
+/* Category summary "(N matched · M missing)" */
+.cat-summary {
+  color: var(--c-text-sec);
+  font-size: 0.82em;
+}
+
+/* ------------------------------------------------------------------ */
+/* 16. Keyframe animations                                             */
+/* ------------------------------------------------------------------ */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bar-grow {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* ------------------------------------------------------------------ */
+/* 17. Accessibility: disable animations for users who prefer it      */
+/* ------------------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
