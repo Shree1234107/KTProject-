@@ -628,11 +628,11 @@ textarea:focus-visible {
   animation: fade-up 250ms ease-out both;
 }
 
-.stat-tile-1 { animation-delay: 0ms; }
-.stat-tile-2 { animation-delay: 60ms; }
-.stat-tile-3 { animation-delay: 120ms; }
-.stat-tile-4 { animation-delay: 180ms; }
-.stat-tile-5 { animation-delay: 240ms; }
+.stat-tile-1 { animation-delay: 0ms;   --count-delay: 0ms;   }
+.stat-tile-2 { animation-delay: 60ms;  --count-delay: 60ms;  }
+.stat-tile-3 { animation-delay: 120ms; --count-delay: 120ms; }
+.stat-tile-4 { animation-delay: 180ms; --count-delay: 180ms; }
+.stat-tile-5 { animation-delay: 240ms; --count-delay: 240ms; }
 
 .stat-tile-label {
   font-size: 0.65rem;
@@ -934,4 +934,62 @@ textarea:focus-visible {
   font-size: 0.72rem;
   color: var(--c-text-sec);
   margin: 4px 0 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* 24. CSS count-up animation (stat tiles + ATS score)                 */
+/* ------------------------------------------------------------------ */
+
+/* Register --count-num as an animatable integer type.
+   Browsers without @property support ignore this block; the animation
+   still ends on the correct value (discrete jump at 50%), and the
+   sr-only span always holds the real number for screen readers.       */
+@property --count-num {
+  syntax: "<integer>";
+  initial-value: 0;
+  inherits: false;
+}
+
+@keyframes count-up {
+  from { --count-num: 0; }
+  to   { --count-num: var(--target, 0); }
+}
+
+/* Visually hidden — accessible to screen readers and copy-paste */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Animated counter element (aria-hidden, purely visual) */
+.count-anim {
+  display: inline-block;
+  counter-reset: cu-num var(--count-num);
+  animation: count-up 900ms ease-out both;
+  animation-delay: var(--count-delay, 0ms);
+}
+
+.count-anim::before {
+  content: counter(cu-num);
+}
+
+/* "%" suffix — rendered by CSS so it moves with the animated number */
+.count-anim--pct::after {
+  content: "%";
+}
+
+/* Reduced motion: section 17 sets animation:none!important on all elements;
+   this additional rule makes the counter show the final target immediately
+   rather than the initial-value 0 that @property would leave behind.    */
+@media (prefers-reduced-motion: reduce) {
+  .count-anim {
+    counter-reset: cu-num var(--target, 0);
+  }
 }

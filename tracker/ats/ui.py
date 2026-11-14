@@ -12,6 +12,7 @@ import streamlit as st
 
 from tracker import ats
 from tracker.ats import report
+from tracker.tiles import count_anim_html
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -110,7 +111,9 @@ def _render_results(res: dict) -> None:
     with score_col:
         st.markdown(
             f'<div class="ats-score-box">'
-            f'<p class="ats-score-num {color_cls}">{score:.0f}</p>'
+            f'<p class="ats-score-num {color_cls}">'
+            f'{count_anim_html(int(round(score)))}'
+            f'</p>'
             f'<p class="ats-score-denom">/ 100</p>'
             f'<p class="ats-score-band {color_cls}">{_html.escape(band)}</p>'
             f'</div>',

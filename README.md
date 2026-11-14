@@ -56,7 +56,7 @@ Status key: **Built** = works today, **Planned** = agreed in the project plan, *
 | Activity heatmap | GitHub-style 26-week calendar grid on the Dashboard; cell shading by application count per day | Built |
 | Funnel chart | Horizontal bars Applied → Responded → Interviewed → Offer with conversion rates | Built |
 | Weekly goal | Persistent weekly application target; progress bar; current and longest streak | Built |
-| Stat tiles | Big-number header row with trend indicators (▲ / ▼) vs the previous 30 days | Built |
+| Stat tiles | Big-number header row with CSS count-up animation (0 → value, ~900 ms, ease-out) and trend indicators vs the previous 30 days; also animates the Resume Matcher score | Built |
 | Sample data | A button that loads demo data so a fresh clone has something to show | Built |
 | ICS export | Download reminders as a calendar file to import by hand | Proposed |
 

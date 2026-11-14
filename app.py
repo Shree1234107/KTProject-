@@ -8,6 +8,7 @@ import streamlit as st
 
 from tracker import analytics, db, theme
 from tracker.ats import ui as ats_ui
+from tracker.tiles import stat_tile_html
 
 st.set_page_config(page_title="Internship Tracker", layout="wide")
 theme.inject()
@@ -63,42 +64,6 @@ _today_str = str(_today)
 # ---------------------------------------------------------------------------
 # Shared HTML builders (called from Dashboard and Board tabs)
 # ---------------------------------------------------------------------------
-
-def _stat_tile(n: int, label: str, value: str, cur, prev, is_rate: bool) -> str:
-    """Build one stat tile HTML string with trend indicator."""
-    if cur is None or prev is None:
-        trend_html = '<span class="trend-none">not enough data for a trend</span>'
-    else:
-        diff = cur - prev
-        if is_rate:
-            cur_str = f"{cur:.0%}"
-            mag = abs(diff * 100)
-            if mag < 0.5:
-                change_str, cls = "no change", "trend-flat"
-            elif diff > 0:
-                change_str, cls = f"up {mag:.1f} points", "trend-up"
-            else:
-                change_str, cls = f"down {mag:.1f} points", "trend-down"
-        else:
-            cur_str = str(int(round(cur)))
-            mag = abs(int(round(diff)))
-            if mag == 0:
-                change_str, cls = "no change", "trend-flat"
-            elif diff > 0:
-                change_str, cls = f"up {mag}", "trend-up"
-            else:
-                change_str, cls = f"down {mag}", "trend-down"
-        trend_html = (
-            f'<span class="{cls}">last 30 days: {cur_str} '
-            f'({change_str} from the 30 days before)</span>'
-        )
-    return (
-        f'<div class="stat-tile stat-tile-{n}">'
-        f'<div class="stat-tile-label">{label}</div>'
-        f'<div class="stat-tile-value">{value}</div>'
-        f'<div class="stat-tile-trend">{trend_html}</div>'
-        f'</div>'
-    )
 
 
 def _heatmap_html(counts: dict, today: dt.date) -> str:
@@ -330,15 +295,15 @@ with tab_dash:
             return c_prev[key] if pc["has_trend"] and c_prev else None
 
         tiles = "".join([
-            _stat_tile(1, "Total", str(s["total"]),
-                       _t("total"), _p("total"), False),
-            _stat_tile(2, "Response rate", f"{s['response_rate']:.0%}",
-                       _t("response_rate"), _p("response_rate"), True),
-            _stat_tile(3, "Interview rate", f"{s['interview_rate']:.0%}",
-                       _t("interview_rate"), _p("interview_rate"), True),
-            _stat_tile(4, "Offers", str(s["offers"]),
-                       _t("offers"), _p("offers"), False),
-            _stat_tile(5, "Active", str(s["active"]), None, None, False),
+            stat_tile_html(1, "Total", str(s["total"]),
+                           _t("total"), _p("total"), False),
+            stat_tile_html(2, "Response rate", f"{s['response_rate']:.0%}",
+                           _t("response_rate"), _p("response_rate"), True),
+            stat_tile_html(3, "Interview rate", f"{s['interview_rate']:.0%}",
+                           _t("interview_rate"), _p("interview_rate"), True),
+            stat_tile_html(4, "Offers", str(s["offers"]),
+                           _t("offers"), _p("offers"), False),
+            stat_tile_html(5, "Active", str(s["active"]), None, None, False),
         ])
         st.markdown(f'<div class="stat-row">{tiles}</div>', unsafe_allow_html=True)
 
