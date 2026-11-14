@@ -993,3 +993,197 @@ textarea:focus-visible {
     counter-reset: cu-num var(--target, 0);
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* 25. Interview stages — timeline + pass rate bars + board match tag  */
+/* ------------------------------------------------------------------ */
+
+/* Timeline */
+.stage-timeline { padding: 4px 0; }
+
+.stage-item {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+.stage-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 12px;
+}
+
+.stage-marker {
+  width: 10px;
+  height: 10px;
+  background: var(--c-blue-600);
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.stage-vline {
+  width: 2px;
+  flex: 1;
+  background: var(--c-blue-200);
+  margin: 2px 0;
+  min-height: 20px;
+}
+
+.stage-body {
+  flex: 1;
+  padding-bottom: 14px;
+}
+
+.stage-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.stage-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.stage-date {
+  font-size: 0.75rem;
+  color: var(--c-text-sec);
+  font-variant-numeric: tabular-nums;
+}
+
+.stage-tag {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border: 1px solid;
+}
+
+.stage-tag-passed {
+  background: var(--c-blue-600);
+  color: var(--c-white);
+  border-color: var(--c-blue-600);
+}
+
+.stage-tag-failed {
+  background: var(--c-white);
+  color: var(--c-blue-700);
+  border-color: var(--c-blue-200);
+}
+
+.stage-tag-sched {
+  background: var(--c-blue-100);
+  color: var(--c-blue-900);
+  border-color: var(--c-blue-200);
+}
+
+.stage-notes {
+  font-size: 0.78rem;
+  color: var(--c-text-sec);
+  margin-top: 2px;
+}
+
+/* Pass rate bars */
+.stage-pass-bars { padding: 4px 0; }
+
+.stage-pass-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.stage-pass-label {
+  font-size: 0.78rem;
+  color: var(--c-text);
+  width: 140px;
+  flex-shrink: 0;
+}
+
+.stage-pass-pct {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--c-blue-700);
+  width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.stage-pass-track {
+  flex: 1;
+  background: var(--c-bg-2);
+  height: 18px;
+  min-width: 60px;
+}
+
+.stage-pass-fill {
+  background: var(--c-blue-600);
+  height: 100%;
+  min-width: 2px;
+}
+
+.stage-pass-counts {
+  font-size: 0.72rem;
+  color: var(--c-text-sec);
+  width: 180px;
+  flex-shrink: 0;
+}
+
+/* Board card match score tag */
+.board-match-tag {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--c-blue-900);
+  background: var(--c-blue-100);
+  border: 1px solid var(--c-blue-200);
+  padding: 1px 5px;
+  margin-top: 4px;
+  letter-spacing: 0.03em;
+}
+
+/* Resume match history in Applications tab */
+.match-history { padding: 4px 0; }
+
+.match-history-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--c-border);
+  font-size: 0.82rem;
+}
+
+.match-history-row:last-child { border-bottom: none; }
+
+.match-history-date {
+  color: var(--c-text-sec);
+  font-variant-numeric: tabular-nums;
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.match-history-label {
+  color: var(--c-text-sec);
+  flex: 1;
+  min-width: 80px;
+}
+
+.match-history-score {
+  font-weight: 700;
+  color: var(--c-blue-700);
+  font-variant-numeric: tabular-nums;
+}
+
+.match-history-band {
+  font-size: 0.7rem;
+  color: var(--c-text-sec);
+  margin-left: 4px;
+}

@@ -50,7 +50,7 @@ Status key: **Built** = works today, **Planned** = agreed in the project plan, *
 | Edit, filter and delete | Search by company or role, filter by status, update a status or notes, delete an entry | Built |
 | Dashboard | Totals, active count, response rate, interview rate and offers; pipeline by status; applications per week; responses by source; deadlines in the next 14 days | Built |
 | Referral tracking | Referrer name and contact per application; compare referred vs. cold response rates | Built |
-| Interview stages | Log each round (recruiter screen, online assessment, technical, behavioral, take-home, onsite/final) with date and outcome (Scheduled, Passed, Failed, Pending) | Planned |
+| Interview stages | Log each round (recruiter screen, online assessment, technical, behavioral, take-home, onsite/final) with date and outcome (Scheduled, Passed, Failed, Pending); pass rate by stage on the Dashboard | Built |
 | Follow-up reminders | Follow-up date per application; a Reminders tab listing overdue, due today and upcoming items, with mark done and snooze 3 or 7 days; flags applications with no reply after 21+ days | Built |
 | Kanban board | Drag-free board tab with one column per status; move cards forward/back/to rejected; "Show N more" for long columns; withdrawn apps in a collapsed expander | Built |
 | Activity heatmap | GitHub-style 26-week calendar grid on the Dashboard; cell shading by application count per day | Built |
@@ -58,7 +58,7 @@ Status key: **Built** = works today, **Planned** = agreed in the project plan, *
 | Weekly goal | Persistent weekly application target; progress bar; current and longest streak | Built |
 | Stat tiles | Big-number header row with CSS count-up animation (0 → value, ~900 ms, ease-out) and trend indicators vs the previous 30 days; also animates the Resume Matcher score | Built |
 | Sample data | A button that loads demo data so a fresh clone has something to show | Built |
-| ICS export | Download reminders as a calendar file to import by hand | Proposed |
+| ICS export | Download follow-ups, deadlines, and scheduled interviews as an RFC 5545 .ics file; open in Apple Calendar or import in Google Calendar | Built |
 
 Statuses: Wishlist, Applied, OA/Screen, Interview, Offer, Rejected, Withdrawn.
 
@@ -80,7 +80,7 @@ Score a resume against a job description and get specific tips. Runs locally; no
 | Section check | Detects Summary, Experience, Education and Skills sections | Built |
 | Improvement tips | "Do these first" shows the top 3, with the rest expandable. Tips cover missing keywords, missing sections, resume length, quantified results and weak action verbs, and are always phrased as "if you have experience" | Built |
 | Download report | Export the result as a Markdown file | Built |
-| Link scores to applications | Save a match score against a tracked application | Proposed |
+| Link scores to applications | Save a match score against a tracked application; view score history and trend chart in the Applications tab; latest score shown on Board cards | Built |
 
 To add skills or aliases, edit `tracker/ats/data/skills.json`.
 
@@ -99,11 +99,13 @@ To add skills or aliases, edit `tracker/ats/data/skills.json`.
 4. **CSV export** *(built)*: download the filtered Applications view as a CSV.
 5. **Sample data** *(built)*: "Load sample data" button in the sidebar populates 15 realistic entries; "Remove sample data" and confirmed "Clear ALL data" buttons are also there.
 
-### Later
-- **Interview stages** *(planned)*: log each round with date and outcome.
-- **ICS export** *(proposed)*: download reminders as a calendar file.
-- **Resume Matcher + tracker link** *(proposed)*: save a match score against an application.
-- Open decisions from the plan: branches with PRs or pushing straight to `main`, Plotly or built-in charts, and any extra fields (salary, job link, recruiter email).
+### Completed
+- **Interview stages** *(built)*: log each round with date and outcome; pass rate by stage chart on the Dashboard.
+- **ICS export** *(built)*: download follow-ups, deadlines and scheduled interviews as an RFC 5545 .ics calendar file.
+- **Resume Matcher + tracker link** *(built)*: save a match score against an application; score history and trend chart in the Applications tab; latest score tag on Board cards.
+
+### Open decisions
+Branches with PRs or pushing straight to `main`, Plotly or built-in charts, extra fields (salary, job link, recruiter email).
 
 ## Layout
 - `app.py` — Streamlit UI (Dashboard / Applications / Add / Reminders / Resume Matcher tabs)

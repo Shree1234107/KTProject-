@@ -1,5 +1,6 @@
 """SQLite storage for internship applications."""
 import datetime as _dt
+import json as _json
 import sqlite3
 from pathlib import Path
 
@@ -15,6 +16,13 @@ CREATE TABLE IF NOT EXISTS settings (
 """
 
 STATUSES = ["Wishlist", "Applied", "OA/Screen", "Interview", "Offer", "Rejected", "Withdrawn"]
+
+STAGE_TYPES = [
+    "Recruiter screen", "Online assessment", "Technical",
+    "Behavioral", "Take-home", "Onsite/Final", "Other",
+]
+
+STAGE_OUTCOMES = ["Scheduled", "Passed", "Failed", "Pending"]
 
 COLUMNS = [
     "id", "company", "role", "location", "status",
@@ -37,6 +45,34 @@ CREATE TABLE IF NOT EXISTS applications (
     referral_contact TEXT DEFAULT '',
     follow_up_date TEXT,
     is_sample INTEGER NOT NULL DEFAULT 0
+)
+"""
+
+_STAGES_SCHEMA = """
+CREATE TABLE IF NOT EXISTS stages (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id INTEGER NOT NULL,
+    stage          TEXT NOT NULL,
+    stage_date     TEXT,
+    outcome        TEXT NOT NULL DEFAULT 'Scheduled',
+    notes          TEXT DEFAULT '',
+    is_sample      INTEGER NOT NULL DEFAULT 0
+)
+"""
+
+_MATCH_SCORES_SCHEMA = """
+CREATE TABLE IF NOT EXISTS match_scores (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id   INTEGER NOT NULL,
+    scanned_at       TEXT NOT NULL,
+    overall_score    REAL NOT NULL,
+    keyword_score    REAL NOT NULL,
+    similarity_score REAL NOT NULL,
+    matched_count    INTEGER NOT NULL DEFAULT 0,
+    missing_count    INTEGER NOT NULL DEFAULT 0,
+    top_missing      TEXT DEFAULT '[]',
+    resume_label     TEXT DEFAULT '',
+    is_sample        INTEGER NOT NULL DEFAULT 0
 )
 """
 
@@ -64,6 +100,8 @@ def connect(path=None):
     conn.row_factory = sqlite3.Row
     conn.execute(SCHEMA)
     conn.execute(_SETTINGS_SCHEMA)
+    conn.execute(_STAGES_SCHEMA)
+    conn.execute(_MATCH_SCORES_SCHEMA)
     _migrate(conn)
     return conn
 
@@ -114,6 +152,8 @@ def update_application(conn, app_id, **fields):
 
 
 def delete_application(conn, app_id):
+    conn.execute("DELETE FROM stages WHERE application_id=?", (app_id,))
+    conn.execute("DELETE FROM match_scores WHERE application_id=?", (app_id,))
     conn.execute("DELETE FROM applications WHERE id=?", (app_id,))
     conn.commit()
 
@@ -124,6 +164,130 @@ def load_applications(conn):
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors="coerce")
     return df
+
+
+# ---------------------------------------------------------------------------
+# Interview stages
+# ---------------------------------------------------------------------------
+
+def add_stage(conn, application_id, stage, stage_date=None, outcome="Scheduled",
+              notes="", is_sample=False):
+    """Insert an interview stage. Returns the new stage id."""
+    row = conn.execute("SELECT id FROM applications WHERE id=?", (application_id,)).fetchone()
+    if not row:
+        raise ValueError(f"Application {application_id} not found")
+    if stage not in STAGE_TYPES:
+        raise ValueError(f"Invalid stage type: {stage}")
+    if outcome not in STAGE_OUTCOMES:
+        raise ValueError(f"Invalid outcome: {outcome}")
+    cur = conn.execute(
+        "INSERT INTO stages (application_id, stage, stage_date, outcome, notes, is_sample) "
+        "VALUES (?,?,?,?,?,?)",
+        (application_id,
+         stage,
+         str(stage_date) if stage_date else None,
+         outcome, notes, 1 if is_sample else 0),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def update_stage(conn, stage_id, **fields):
+    """Update one or more fields of a stage row."""
+    allowed = {"stage", "stage_date", "outcome", "notes"}
+    bad = set(fields) - allowed
+    if bad:
+        raise ValueError(f"Unknown stage fields: {bad}")
+    if "stage" in fields and fields["stage"] not in STAGE_TYPES:
+        raise ValueError(f"Invalid stage type: {fields['stage']}")
+    if "outcome" in fields and fields["outcome"] not in STAGE_OUTCOMES:
+        raise ValueError(f"Invalid outcome: {fields['outcome']}")
+    if not fields:
+        return
+    sets = ", ".join(f"{k}=?" for k in fields)
+    conn.execute(f"UPDATE stages SET {sets} WHERE id=?", (*fields.values(), stage_id))
+    conn.commit()
+
+
+def delete_stage(conn, stage_id):
+    conn.execute("DELETE FROM stages WHERE id=?", (stage_id,))
+    conn.commit()
+
+
+def load_stages(conn, application_id=None):
+    """Load stages, optionally filtered to one application."""
+    if application_id is not None:
+        df = pd.read_sql_query(
+            "SELECT * FROM stages WHERE application_id=? ORDER BY stage_date, id",
+            conn, params=(application_id,),
+        )
+    else:
+        df = pd.read_sql_query(
+            "SELECT * FROM stages ORDER BY application_id, stage_date, id",
+            conn,
+        )
+    if "stage_date" in df.columns:
+        df["stage_date"] = pd.to_datetime(df["stage_date"], errors="coerce")
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Resume match scores
+# ---------------------------------------------------------------------------
+
+def add_match_score(conn, application_id, overall_score, keyword_score,
+                    similarity_score, matched_count, missing_count,
+                    top_missing, resume_label, is_sample=False):
+    """Save a resume matcher result against an application."""
+    row = conn.execute("SELECT id FROM applications WHERE id=?", (application_id,)).fetchone()
+    if not row:
+        raise ValueError(f"Application {application_id} not found")
+    scanned_at = _dt.datetime.now().isoformat()
+    conn.execute(
+        "INSERT INTO match_scores "
+        "(application_id, scanned_at, overall_score, keyword_score, similarity_score, "
+        "matched_count, missing_count, top_missing, resume_label, is_sample) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (application_id, scanned_at, float(overall_score), float(keyword_score),
+         float(similarity_score), int(matched_count), int(missing_count),
+         _json.dumps(list(top_missing)), str(resume_label), 1 if is_sample else 0),
+    )
+    conn.commit()
+
+
+def load_match_scores(conn, application_id=None):
+    """Load match scores, optionally filtered to one application."""
+    if application_id is not None:
+        df = pd.read_sql_query(
+            "SELECT * FROM match_scores WHERE application_id=? ORDER BY scanned_at DESC",
+            conn, params=(application_id,),
+        )
+    else:
+        df = pd.read_sql_query(
+            "SELECT * FROM match_scores ORDER BY scanned_at DESC",
+            conn,
+        )
+    if "scanned_at" in df.columns:
+        df["scanned_at"] = pd.to_datetime(df["scanned_at"], errors="coerce")
+    return df
+
+
+def delete_match_score(conn, score_id):
+    conn.execute("DELETE FROM match_scores WHERE id=?", (score_id,))
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Sample data
+# ---------------------------------------------------------------------------
+
+def _sample_app_id(conn, company):
+    """Return the most recently inserted sample application id for *company*."""
+    row = conn.execute(
+        "SELECT id FROM applications WHERE company=? AND is_sample=1 ORDER BY id DESC LIMIT 1",
+        (company,),
+    ).fetchone()
+    return row["id"] if row else None
 
 
 def load_sample_data(conn) -> int:
@@ -165,17 +329,80 @@ def load_sample_data(conn) -> int:
             is_sample=True,
         )
         count += 1
+
+    # Sample interview stages
+    google_id = _sample_app_id(conn, "Google")
+    if google_id:
+        add_stage(conn, google_id, "Recruiter screen",
+                  str(today - td(days=42)), "Passed", is_sample=True)
+        add_stage(conn, google_id, "Technical",
+                  str(today - td(days=30)), "Passed", is_sample=True)
+        add_stage(conn, google_id, "Onsite/Final",
+                  str(today + td(days=5)), "Scheduled", is_sample=True)
+
+    amazon_id = _sample_app_id(conn, "Amazon")
+    if amazon_id:
+        add_stage(conn, amazon_id, "Recruiter screen",
+                  str(today - td(days=32)), "Passed", is_sample=True)
+        add_stage(conn, amazon_id, "Technical",
+                  str(today - td(days=22)), "Failed", is_sample=True)
+
+    microsoft_id = _sample_app_id(conn, "Microsoft")
+    if microsoft_id:
+        add_stage(conn, microsoft_id, "Recruiter screen",
+                  str(today - td(days=58)), "Passed", is_sample=True)
+        add_stage(conn, microsoft_id, "Technical",
+                  str(today - td(days=48)), "Passed", is_sample=True)
+        add_stage(conn, microsoft_id, "Behavioral",
+                  str(today - td(days=42)), "Passed", is_sample=True)
+        add_stage(conn, microsoft_id, "Onsite/Final",
+                  str(today - td(days=35)), "Passed", is_sample=True)
+
+    uber_id = _sample_app_id(conn, "Uber")
+    if uber_id:
+        add_stage(conn, uber_id, "Recruiter screen",
+                  str(today - td(days=52)), "Passed", is_sample=True)
+        add_stage(conn, uber_id, "Technical",
+                  str(today + td(days=3)), "Scheduled", is_sample=True)
+
+    figma_id = _sample_app_id(conn, "Figma")
+    if figma_id:
+        add_stage(conn, figma_id, "Recruiter screen",
+                  str(today - td(days=35)), "Passed", is_sample=True)
+        add_stage(conn, figma_id, "Technical",
+                  str(today + td(days=7)), "Scheduled", is_sample=True)
+
+    # Sample match scores
+    amazon_id2 = _sample_app_id(conn, "Amazon")
+    if amazon_id2:
+        add_match_score(conn, amazon_id2, 65.0, 62.0, 70.0, 11, 5,
+                        ["kubernetes", "terraform", "graphql", "redis", "kafka"],
+                        "demo resume", is_sample=True)
+        add_match_score(conn, amazon_id2, 72.0, 68.0, 78.0, 15, 4,
+                        ["kubernetes", "terraform", "docker", "graphql"],
+                        "demo resume v2", is_sample=True)
+
+    meta_id = _sample_app_id(conn, "Meta")
+    if meta_id:
+        add_match_score(conn, meta_id, 85.0, 82.0, 90.0, 20, 2,
+                        ["pytorch", "mlops"],
+                        "demo resume", is_sample=True)
+
     return count
 
 
 def clear_sample_data(conn) -> None:
     """Remove all sample rows (is_sample=1)."""
+    conn.execute("DELETE FROM stages WHERE is_sample=1")
+    conn.execute("DELETE FROM match_scores WHERE is_sample=1")
     conn.execute("DELETE FROM applications WHERE is_sample=1")
     conn.commit()
 
 
 def clear_all_data(conn) -> None:
-    """Remove every application row."""
+    """Remove every row from applications, stages and match_scores."""
+    conn.execute("DELETE FROM stages")
+    conn.execute("DELETE FROM match_scores")
     conn.execute("DELETE FROM applications")
     conn.commit()
 

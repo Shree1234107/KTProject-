@@ -97,7 +97,7 @@ def _keyword_section(
 # Results rendering
 # ---------------------------------------------------------------------------
 
-def _render_results(res: dict) -> None:
+def _render_results(res: dict, conn=None) -> None:
     """Render the full results panel from an ats.analyze* result dict."""
     score = res["overall_score"]
     band = report.score_band(score)
@@ -174,12 +174,48 @@ def _render_results(res: dict) -> None:
         mime="text/markdown",
     )
 
+    # --- Save to application ---
+    if conn is not None:
+        from tracker import db as _db
+        st.divider()
+        st.subheader("Save to application")
+        apps_df = _db.load_applications(conn)
+        if apps_df.empty:
+            st.caption("Add an application to the tracker to save this score.")
+        else:
+            def _fmt_app(app_id: int) -> str:
+                row = apps_df[apps_df["id"] == app_id]
+                if row.empty:
+                    return str(app_id)
+                r = row.iloc[0]
+                return f"{r['company']} — {r['role']} ({r['status']})"
+
+            save_app_id = st.selectbox(
+                "Application",
+                apps_df["id"].tolist(),
+                format_func=_fmt_app,
+                key="ats_save_app",
+            )
+            resume_label = st.session_state.get("ats_resume_label", "")
+            if st.button("Save score to application", key="ats_save_btn"):
+                _db.add_match_score(
+                    conn, int(save_app_id),
+                    overall_score=res["overall_score"],
+                    keyword_score=res["keyword_coverage_score"],
+                    similarity_score=res["cosine_similarity_score"],
+                    matched_count=len(res["matched_keywords"]),
+                    missing_count=len(res["missing_keywords"]),
+                    top_missing=[kw["keyword"] for kw in res["missing_keywords"][:5]],
+                    resume_label=resume_label,
+                )
+                st.success(f"Score saved to {_fmt_app(int(save_app_id))}.")
+
 
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
-def render() -> None:
+def render(conn=None) -> None:
     """Render the full Resume Matcher tab. Call this from app.py."""
     st.header("Resume Matcher")
     st.caption(
@@ -275,6 +311,7 @@ def render() -> None:
                     if pdf_file is None:
                         raise ValueError("Please upload a resume PDF.")
                     result = ats.analyze(pdf_file.getvalue(), jd_text)
+                    st.session_state["ats_resume_label"] = pdf_file.name
                 elif mode == "Paste text":
                     if len(paste_text.strip()) < ats.MIN_RESUME_CHARS:
                         raise ValueError(
@@ -282,8 +319,10 @@ def render() -> None:
                             f"paste at least {ats.MIN_RESUME_CHARS} characters of your resume."
                         )
                     result = ats.analyze_text(paste_text, jd_text)
+                    st.session_state["ats_resume_label"] = "pasted text"
                 else:  # demo
                     result = ats.analyze_text(ats.sample_resume_text(), jd_text)
+                    st.session_state["ats_resume_label"] = "demo resume"
             except ValueError as exc:
                 error_msg = str(exc)
 
@@ -300,4 +339,4 @@ def render() -> None:
 
     # --- Show persisted results ---
     if res := st.session_state.get("ats_result"):
-        _render_results(res)
+        _render_results(res, conn)

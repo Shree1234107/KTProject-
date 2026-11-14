@@ -6,7 +6,8 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from tracker import analytics, db, theme
+from tracker import analytics, db, ics as _ics, theme
+from tracker.ats import report as _ats_report
 from tracker.ats import ui as ats_ui
 from tracker.tiles import stat_tile_html
 
@@ -58,11 +59,21 @@ tab_dash, tab_board, tab_apps, tab_add, tab_rem, tab_ats = st.tabs(
 )
 
 df = db.load_applications(conn)
-_today = dt.date.today()
+stages_df    = db.load_stages(conn)
+all_scores_df = db.load_match_scores(conn)
+_latest_scores = analytics.latest_match_scores(all_scores_df)
+_score_by_app: dict = {}
+if not _latest_scores.empty:
+    _score_by_app = dict(zip(
+        _latest_scores["application_id"].astype(int),
+        _latest_scores["overall_score"],
+    ))
+
+_today     = dt.date.today()
 _today_str = str(_today)
 
 # ---------------------------------------------------------------------------
-# Shared HTML builders (called from Dashboard and Board tabs)
+# Shared HTML builders
 # ---------------------------------------------------------------------------
 
 
@@ -148,7 +159,6 @@ def _funnel_html(f: dict) -> str:
             f'<div class="funnel-bar {cls}" style="width:{w:.1f}%">{cnt}</div>'
             f'</div>'
         )
-        # Conversion label: under every bar except Applied (index 0)
         if i == 1:
             p.append(
                 f'<div class="funnel-conv">'
@@ -218,7 +228,84 @@ def _html_table(
     )
 
 
-def _board_card_html(row, today_d: dt.date) -> str:
+def _stage_timeline_html(app_stages: pd.DataFrame) -> str:
+    """Build the interview stages timeline HTML for a single application."""
+    items: list[str] = []
+    rows_list = list(app_stages.itertuples())
+    for i, row in enumerate(rows_list):
+        is_last = (i == len(rows_list) - 1)
+        date_str = str(row.stage_date)[:10] if pd.notna(row.stage_date) else "—"
+        outcome = row.outcome
+        outcome_cls = {
+            "Passed":    "stage-tag-passed",
+            "Failed":    "stage-tag-failed",
+        }.get(outcome, "stage-tag-sched")
+        notes_html = ""
+        notes_val = str(getattr(row, "notes", "") or "").strip()
+        if notes_val:
+            notes_html = f'<div class="stage-notes">{_html.escape(notes_val)}</div>'
+        vline = "" if is_last else '<div class="stage-vline"></div>'
+        items.append(
+            f'<div class="stage-item">'
+            f'<div class="stage-left"><div class="stage-marker"></div>{vline}</div>'
+            f'<div class="stage-body">'
+            f'<div class="stage-row">'
+            f'<span class="stage-name">{_html.escape(str(row.stage))}</span>'
+            f'<span class="stage-date">{_html.escape(date_str)}</span>'
+            f'<span class="stage-tag {outcome_cls}">{_html.escape(outcome)}</span>'
+            f'</div>'
+            f'{notes_html}'
+            f'</div>'
+            f'</div>'
+        )
+    return f'<div class="stage-timeline">{"".join(items)}</div>'
+
+
+def _stage_pass_bars_html(pass_rates: pd.DataFrame) -> str:
+    """Build horizontal pass rate bars for the Dashboard stage section."""
+    rows_html: list[str] = []
+    for row in pass_rates.itertuples():
+        pr = row.pass_rate
+        fill_pct = round(pr * 100, 1) if pr is not None else 0.0
+        pr_str = f"{fill_pct:.0f}%" if pr is not None else "—"
+        counts_parts = []
+        if row.passed:  counts_parts.append(f"{row.passed} passed")
+        if row.failed:  counts_parts.append(f"{row.failed} failed")
+        if row.pending: counts_parts.append(f"{row.pending} pending")
+        counts_str = " · ".join(counts_parts)
+        rows_html.append(
+            f'<div class="stage-pass-row">'
+            f'<span class="stage-pass-label">{_html.escape(str(row.stage))}</span>'
+            f'<span class="stage-pass-pct">{pr_str}</span>'
+            f'<div class="stage-pass-track">'
+            f'<div class="stage-pass-fill" style="width:{fill_pct:.1f}%"></div>'
+            f'</div>'
+            f'<span class="stage-pass-counts">{_html.escape(counts_str)}</span>'
+            f'</div>'
+        )
+    return f'<div class="stage-pass-bars">{"".join(rows_html)}</div>'
+
+
+def _match_history_html(app_scores: pd.DataFrame) -> str:
+    """Build the resume match score history table HTML."""
+    rows_html: list[str] = []
+    for row in app_scores.itertuples():
+        date_str = str(row.scanned_at)[:10] if pd.notna(row.scanned_at) else "—"
+        label    = str(row.resume_label or "—")
+        score    = int(round(row.overall_score))
+        band     = _ats_report.score_band(row.overall_score)
+        rows_html.append(
+            f'<div class="match-history-row">'
+            f'<span class="match-history-date">{_html.escape(date_str)}</span>'
+            f'<span class="match-history-label">{_html.escape(label)}</span>'
+            f'<span class="match-history-score">{score}</span>'
+            f'<span class="match-history-band">{_html.escape(band)}</span>'
+            f'</div>'
+        )
+    return f'<div class="match-history">{"".join(rows_html)}</div>'
+
+
+def _board_card_html(row, today_d: dt.date, match_score: float | None = None) -> str:
     """Build the HTML for a single board card (no buttons)."""
     days_ago_str = ""
     if pd.notna(row.date_applied):
@@ -232,15 +319,22 @@ def _board_card_html(row, today_d: dt.date) -> str:
     if hasattr(row, "follow_up_date") and pd.notna(row.follow_up_date):
         fu_str = f"Follow up {row.follow_up_date.strftime('%b %d')}"
 
-    meta = ", ".join(x for x in [row.location, days_ago_str] if x)
+    meta  = ", ".join(x for x in [row.location, days_ago_str] if x)
     dates = " · ".join(x for x in [deadline_str, fu_str] if x)
+
+    match_tag = ""
+    if match_score is not None:
+        match_tag = (
+            f'<div class="board-match-tag">Match {int(round(match_score))}</div>'
+        )
 
     return (
         '<div class="board-card">'
         f'<div class="board-card-company">{_html.escape(row.company)}</div>'
         f'<div class="board-card-role">{_html.escape(row.role)}</div>'
-        + (f'<div class="board-card-meta">{_html.escape(meta)}</div>' if meta else "")
+        + (f'<div class="board-card-meta">{_html.escape(meta)}</div>'  if meta  else "")
         + (f'<div class="board-card-dates">{_html.escape(dates)}</div>' if dates else "")
+        + match_tag
         + "</div>"
     )
 
@@ -248,11 +342,11 @@ def _board_card_html(row, today_d: dt.date) -> str:
 def _render_board_cards(group: pd.DataFrame, status_name: str) -> None:
     """Render board cards (HTML + buttons) for a group of rows."""
     for row in group.itertuples():
-        st.markdown(_board_card_html(row, _today), unsafe_allow_html=True)
+        score = _score_by_app.get(int(row.id))
+        st.markdown(_board_card_html(row, _today, score), unsafe_allow_html=True)
 
         nxt = analytics.next_status(status_name)
         prv = analytics.prev_status(status_name)
-        # Build button list: next (if applicable), reject (if not already rejected), back
         btns: list[tuple[str, str]] = []
         if nxt is not None:
             btns.append(("Next stage", f"nxt_{row.id}"))
@@ -282,32 +376,31 @@ with tab_dash:
     if df.empty:
         st.info("No applications yet. Add one in the Add tab.")
     else:
-        s = analytics.summary(df)
-        pc = analytics.period_comparison(df, today=_today_str)
-        c_now = pc["current"]
+        s  = analytics.summary(df, stages_df)
+        pc = analytics.period_comparison(df, today=_today_str, stages_df=stages_df)
+        c_now  = pc["current"]
         c_prev = pc["previous"]
 
-        # --- Feature 5: stat tile header row ---
         def _t(key):
-            return c_now[key] if pc["has_trend"] and c_now else None
+            return c_now[key]  if pc["has_trend"] and c_now  else None
 
         def _p(key):
             return c_prev[key] if pc["has_trend"] and c_prev else None
 
         tiles = "".join([
-            stat_tile_html(1, "Total", str(s["total"]),
-                           _t("total"), _p("total"), False),
-            stat_tile_html(2, "Response rate", f"{s['response_rate']:.0%}",
-                           _t("response_rate"), _p("response_rate"), True),
+            stat_tile_html(1, "Total",          str(s["total"]),
+                           _t("total"),          _p("total"),          False),
+            stat_tile_html(2, "Response rate",  f"{s['response_rate']:.0%}",
+                           _t("response_rate"),  _p("response_rate"),  True),
             stat_tile_html(3, "Interview rate", f"{s['interview_rate']:.0%}",
                            _t("interview_rate"), _p("interview_rate"), True),
-            stat_tile_html(4, "Offers", str(s["offers"]),
-                           _t("offers"), _p("offers"), False),
-            stat_tile_html(5, "Active", str(s["active"]), None, None, False),
+            stat_tile_html(4, "Offers",          str(s["offers"]),
+                           _t("offers"),          _p("offers"),        False),
+            stat_tile_html(5, "Active",          str(s["active"]), None, None, False),
         ])
         st.markdown(f'<div class="stat-row">{tiles}</div>', unsafe_allow_html=True)
 
-        # --- Feature 4: weekly goal ---
+        # --- Weekly goal ---
         with st.expander("Weekly goal", expanded=True):
             goal_stored = int(db.get_setting(conn, "weekly_goal", "10"))
             new_goal = st.number_input(
@@ -329,7 +422,7 @@ with tab_dash:
                 unsafe_allow_html=True,
             )
 
-        # --- Existing pipeline + weekly chart ---
+        # --- Pipeline + weekly chart ---
         left, right = st.columns(2)
         left.subheader("Pipeline")
         sc = analytics.status_counts(df).reset_index()
@@ -353,16 +446,22 @@ with tab_dash:
         else:
             right.line_chart(weekly, color="#2563eb")
 
-        # --- Feature 2: heatmap ---
+        # --- Heatmap ---
         st.subheader("Activity — last 26 weeks")
         apd = analytics.applications_per_day(df, today=_today_str)
         st.markdown(_heatmap_html(apd, _today), unsafe_allow_html=True)
 
-        # --- Feature 3: funnel ---
+        # --- Funnel ---
         st.subheader("Pipeline funnel")
-        st.markdown(_funnel_html(analytics.funnel(df)), unsafe_allow_html=True)
+        st.markdown(_funnel_html(analytics.funnel(df, stages_df)), unsafe_allow_html=True)
 
-        # --- Existing: by source, referred vs cold, deadlines ---
+        # --- Interview stage pass rates ---
+        pr = analytics.stage_pass_rates(stages_df)
+        if not pr.empty:
+            st.subheader("Pass rate by stage")
+            st.markdown(_stage_pass_bars_html(pr), unsafe_allow_html=True)
+
+        # --- By source, referral comparison, deadlines ---
         st.subheader("Where are responses coming from?")
         src = analytics.by_source(df)
         if src.empty:
@@ -386,7 +485,7 @@ with tab_dash:
             )
 
         st.subheader("Referred vs. Cold")
-        rc = analytics.referral_comparison(df)
+        rc = analytics.referral_comparison(df, stages_df)
         if rc["referred"]["submitted"] == 0 and rc["cold"]["submitted"] == 0:
             st.caption("No referral data yet — add a referral name when logging applications.")
         else:
@@ -493,11 +592,11 @@ with tab_apps:
         new_location    = ea.text_input("Location",          cur.get("location", ""),      key=f"lo{choice}")
         new_source      = eb.text_input("Source",            cur.get("source", ""),        key=f"so{choice}")
         new_status      = ea.selectbox("Status", db.STATUSES, index=db.STATUSES.index(cur["status"]), key=f"st{choice}")
-        new_applied     = eb.date_input("Date applied",      value=_to_date(cur.get("date_applied")),  key=f"da{choice}")
-        new_deadline    = ea.date_input("Deadline",          value=_to_date(cur.get("deadline")),       key=f"dl{choice}")
+        new_applied     = eb.date_input("Date applied",      value=_to_date(cur.get("date_applied")),   key=f"da{choice}")
+        new_deadline    = ea.date_input("Deadline",          value=_to_date(cur.get("deadline")),        key=f"dl{choice}")
         new_ref_name    = eb.text_input("Referral name",     cur.get("referral_name", ""), key=f"rn{choice}")
         new_ref_contact = ea.text_input("Referral contact",  cur.get("referral_contact", ""), key=f"rc{choice}")
-        new_follow_up   = eb.date_input("Follow-up date",    value=_to_date(cur.get("follow_up_date")), key=f"fu{choice}")
+        new_follow_up   = eb.date_input("Follow-up date",    value=_to_date(cur.get("follow_up_date")),  key=f"fu{choice}")
         new_notes       = st.text_area("Notes",              cur.get("notes", ""),         key=f"no{choice}")
 
         b1, b2, _ = st.columns([1, 1, 6])
@@ -523,6 +622,84 @@ with tab_apps:
         if b2.button("Delete"):
             db.delete_application(conn, int(choice))
             st.rerun()
+
+        # --- Interview stages ---
+        st.divider()
+        st.subheader("Interview stages")
+
+        if not stages_df.empty and "application_id" in stages_df.columns:
+            app_stages = stages_df[stages_df["application_id"] == int(choice)].copy()
+        else:
+            app_stages = pd.DataFrame()
+        if not app_stages.empty:
+            app_stages = app_stages.sort_values("stage_date", na_position="first")
+
+        cur_status = cur["status"]
+        if not app_stages.empty and cur_status in {"Wishlist", "Applied"}:
+            st.markdown(
+                '<div class="ats-note">Stages logged — consider updating the status '
+                "to OA/Screen or Interview.</div>",
+                unsafe_allow_html=True,
+            )
+
+        if app_stages.empty:
+            st.caption("No interview stages logged yet.")
+        else:
+            st.markdown(_stage_timeline_html(app_stages), unsafe_allow_html=True)
+            for stage_row in app_stages.itertuples():
+                sc1, sc2, sc3, sc4 = st.columns([4, 1, 1, 1])
+                s_label = str(stage_row.stage)
+                if pd.notna(stage_row.stage_date):
+                    s_label += f" — {str(stage_row.stage_date)[:10]}"
+                sc1.caption(s_label)
+                if stage_row.outcome != "Passed":
+                    if sc2.button("Pass", key=f"sp_{stage_row.id}"):
+                        db.update_stage(conn, int(stage_row.id), outcome="Passed")
+                        st.rerun()
+                if stage_row.outcome != "Failed":
+                    if sc3.button("Fail", key=f"sf_{stage_row.id}"):
+                        db.update_stage(conn, int(stage_row.id), outcome="Failed")
+                        st.rerun()
+                if sc4.button("Del", key=f"sd_{stage_row.id}"):
+                    db.delete_stage(conn, int(stage_row.id))
+                    st.rerun()
+
+        with st.expander("Add interview stage"):
+            with st.form(f"add_stage_{choice}"):
+                sg1, sg2 = st.columns(2)
+                new_stage_type    = sg1.selectbox("Stage type", db.STAGE_TYPES,    key=f"stype_{choice}")
+                new_stage_date    = sg2.date_input("Date", dt.date.today(),         key=f"sdate_{choice}")
+                new_stage_outcome = sg1.selectbox("Outcome", db.STAGE_OUTCOMES,    key=f"sout_{choice}")
+                new_stage_notes   = sg2.text_input("Notes", "",                     key=f"snotes_{choice}")
+                if st.form_submit_button("Add stage"):
+                    db.add_stage(conn, int(choice), new_stage_type, str(new_stage_date),
+                                 new_stage_outcome, new_stage_notes)
+                    st.rerun()
+
+        # --- Resume match history ---
+        if not all_scores_df.empty and "application_id" in all_scores_df.columns:
+            app_scores = all_scores_df[all_scores_df["application_id"] == int(choice)].copy()
+        else:
+            app_scores = pd.DataFrame()
+
+        if not app_scores.empty:
+            st.divider()
+            st.subheader("Resume match history")
+            st.markdown(_match_history_html(app_scores), unsafe_allow_html=True)
+            if len(app_scores) >= 2:
+                chart_df = (
+                    app_scores[["scanned_at", "overall_score"]]
+                    .sort_values("scanned_at")
+                    .set_index("scanned_at")
+                    .rename(columns={"overall_score": "Score"})
+                )
+                st.line_chart(chart_df, color="#2563eb")
+            # Delete buttons
+            for score_row in app_scores.itertuples():
+                date_lbl = str(score_row.scanned_at)[:10]
+                if st.button(f"Delete score from {date_lbl}", key=f"ds_{score_row.id}"):
+                    db.delete_match_score(conn, int(score_row.id))
+                    st.rerun()
 
 # ---------------------------------------------------------------------------
 # Add
@@ -558,7 +735,7 @@ with tab_add:
 # Reminders
 # ---------------------------------------------------------------------------
 with tab_rem:
-    rem = analytics.reminders(df, today=_today_str)
+    rem   = analytics.reminders(df, today=_today_str)
     stale = analytics.stale_applications(df, today=_today_str)
 
     _has_any = any(not v.empty for v in rem.values()) or not stale.empty
@@ -602,8 +779,41 @@ with tab_rem:
                 hide_index=True,
             )
 
+    # --- ICS calendar export ---
+    st.divider()
+    st.subheader("Download calendar (.ics)")
+    ic1, ic2, ic3, ic4 = st.columns(4)
+    inc_fu   = ic1.checkbox("Follow-ups",    value=True,  key="ics_fu")
+    inc_dl   = ic2.checkbox("Deadlines",     value=True,  key="ics_dl")
+    inc_int  = ic3.checkbox("Interviews",    value=True,  key="ics_int")
+    inc_past = ic4.checkbox("Include past",  value=False, key="ics_past")
+
+    ics_text   = _ics.build_ics(df, stages_df, _today_str,
+                                include_followups=inc_fu,
+                                include_deadlines=inc_dl,
+                                include_interviews=inc_int,
+                                include_past=inc_past)
+    event_count = ics_text.count("BEGIN:VEVENT")
+    s_plural    = "s" if event_count != 1 else ""
+    if event_count == 0:
+        st.caption("No events match the selected filters.")
+    else:
+        st.caption(f"{event_count} event{s_plural} selected.")
+    st.download_button(
+        "Download calendar (.ics)",
+        data=ics_text.encode("utf-8"),
+        file_name="tracker.ics",
+        mime="text/calendar",
+        key="ics_download",
+        disabled=(event_count == 0),
+    )
+    st.caption(
+        "Open the .ics file to add events to Apple Calendar. "
+        "In Google Calendar: Settings > Import & export > Import."
+    )
+
 # ---------------------------------------------------------------------------
 # Resume Matcher
 # ---------------------------------------------------------------------------
 with tab_ats:
-    ats_ui.render()
+    ats_ui.render(conn)

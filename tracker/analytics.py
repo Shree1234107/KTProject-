@@ -1,23 +1,56 @@
 """Dashboard metrics computed from the applications DataFrame."""
 import pandas as pd
 
-from .db import STATUSES
+from .db import STATUSES, STAGE_TYPES
 
 ADVANCED = {"OA/Screen", "Interview", "Offer"}
 SUBMITTED = set(STATUSES) - {"Wishlist"}
 
 
-def summary(df):
+# ---------------------------------------------------------------------------
+# Internal helpers — stages-aware responded / interviewed masks
+# ---------------------------------------------------------------------------
+
+def _stage_app_ids(stages_df) -> set:
+    """Return the set of application_ids that have at least one logged stage."""
+    if stages_df is None or stages_df.empty:
+        return set()
+    return set(stages_df["application_id"].unique())
+
+
+def _responded_mask(submitted: pd.DataFrame, stage_app_ids: set) -> pd.Series:
+    """True for submitted rows that have responded (by status or by any logged stage)."""
+    by_status = submitted["status"].isin(ADVANCED | {"Rejected"})
+    if stage_app_ids:
+        return by_status | submitted["id"].isin(stage_app_ids)
+    return by_status
+
+
+def _interviewed_mask(submitted: pd.DataFrame, stage_app_ids: set) -> pd.Series:
+    """True for submitted rows at interview level (by status or by any logged stage)."""
+    by_status = submitted["status"].isin({"Interview", "Offer"})
+    if stage_app_ids:
+        return by_status | submitted["id"].isin(stage_app_ids)
+    return by_status
+
+
+# ---------------------------------------------------------------------------
+# Core metrics
+# ---------------------------------------------------------------------------
+
+def summary(df, stages_df=None):
+    stage_ids = _stage_app_ids(stages_df)
     submitted = df[df["status"].isin(SUBMITTED)]
     n = len(submitted)
-    advanced = submitted["status"].isin(ADVANCED | {"Rejected"}).sum()
+    advanced    = int(_responded_mask(submitted, stage_ids).sum())
+    interviewed = int(_interviewed_mask(submitted, stage_ids).sum())
     return {
-        "total": len(df),
-        "submitted": n,
-        "response_rate": (advanced / n) if n else 0.0,
-        "interview_rate": (submitted["status"].isin({"Interview", "Offer"}).sum() / n) if n else 0.0,
-        "offers": int((df["status"] == "Offer").sum()),
-        "active": int(df["status"].isin({"Applied", "OA/Screen", "Interview"}).sum()),
+        "total":          len(df),
+        "submitted":      n,
+        "response_rate":  (advanced    / n) if n else 0.0,
+        "interview_rate": (interviewed / n) if n else 0.0,
+        "offers":         int((df["status"] == "Offer").sum()),
+        "active":         int(df["status"].isin({"Applied", "OA/Screen", "Interview"}).sum()),
     }
 
 
@@ -51,7 +84,8 @@ def upcoming_deadlines(df, today=None, days=14):
     return d.sort_values("deadline")[["company", "role", "deadline", "status"]]
 
 
-def referral_comparison(df: pd.DataFrame) -> dict:
+def referral_comparison(df: pd.DataFrame, stages_df=None) -> dict:
+    stage_ids = _stage_app_ids(stages_df)
     zero = {"count": 0, "submitted": 0, "response_rate": 0.0, "interview_rate": 0.0}
     if df.empty or "referral_name" not in df.columns:
         return {"referred": dict(zero), "cold": dict(zero)}
@@ -62,12 +96,12 @@ def referral_comparison(df: pd.DataFrame) -> dict:
         group = df[mask]
         submitted = group[group["status"].isin(SUBMITTED)]
         n = len(submitted)
-        responded = submitted["status"].isin(ADVANCED | {"Rejected"}).sum()
-        interviewed = submitted["status"].isin({"Interview", "Offer"}).sum()
+        responded   = int(_responded_mask(submitted, stage_ids).sum())
+        interviewed = int(_interviewed_mask(submitted, stage_ids).sum())
         result[label] = {
-            "count": len(group),
-            "submitted": n,
-            "response_rate": (responded / n) if n else 0.0,
+            "count":          len(group),
+            "submitted":      n,
+            "response_rate":  (responded   / n) if n else 0.0,
             "interview_rate": (interviewed / n) if n else 0.0,
         }
     return result
@@ -169,13 +203,14 @@ def applications_per_day(df: pd.DataFrame, today=None, weeks: int = 26) -> dict:
 # Feature: Funnel chart
 # ---------------------------------------------------------------------------
 
-def funnel(df: pd.DataFrame) -> dict:
+def funnel(df: pd.DataFrame, stages_df=None) -> dict:
     """Compute pipeline funnel counts and step-conversion rates.
 
     Returns applied / responded / interviewed / offered counts plus
     ``pct_responded``, ``pct_interviewed``, ``pct_offered`` as fractions
     relative to *applied*.
     """
+    stage_ids = _stage_app_ids(stages_df)
     submitted = df[df["status"].isin(SUBMITTED)]
     n = len(submitted)
     if n == 0:
@@ -184,8 +219,8 @@ def funnel(df: pd.DataFrame) -> dict:
             "pct_responded": 0.0, "pct_interviewed": 0.0, "pct_offered": 0.0,
             "pct_step_interviewed": 0.0, "pct_step_offered": 0.0,
         }
-    responded   = int(submitted["status"].isin(ADVANCED | {"Rejected"}).sum())
-    interviewed = int(submitted["status"].isin({"Interview", "Offer"}).sum())
+    responded   = int(_responded_mask(submitted, stage_ids).sum())
+    interviewed = int(_interviewed_mask(submitted, stage_ids).sum())
     offered     = int((submitted["status"] == "Offer").sum())
     return {
         "applied":               n,
@@ -272,7 +307,7 @@ def goal_streak(df: pd.DataFrame, goal: int, today=None) -> dict:
 # Feature: Period comparison (trend tiles)
 # ---------------------------------------------------------------------------
 
-def period_comparison(df: pd.DataFrame, today=None, days: int = 30) -> dict:
+def period_comparison(df: pd.DataFrame, today=None, days: int = 30, stages_df=None) -> dict:
     """Compare key metrics for the last *days* days vs the *days* days before.
 
     Returns::
@@ -295,13 +330,19 @@ def period_comparison(df: pd.DataFrame, today=None, days: int = 30) -> dict:
         (dated["date_applied"] <  curr_start)
     ]
 
+    def _filter_stages(sdf):
+        if stages_df is None or stages_df.empty or sdf.empty:
+            return stages_df
+        app_ids = set(sdf["id"])
+        return stages_df[stages_df["application_id"].isin(app_ids)]
+
     def _m(sdf):
-        s = summary(sdf)
+        s = summary(sdf, _filter_stages(sdf))
         return {
-            "total":         s["total"],
-            "response_rate": s["response_rate"],
-            "interview_rate":s["interview_rate"],
-            "offers":        s["offers"],
+            "total":          s["total"],
+            "response_rate":  s["response_rate"],
+            "interview_rate": s["interview_rate"],
+            "offers":         s["offers"],
         }
 
     _TREND_MIN = 5
@@ -313,3 +354,56 @@ def period_comparison(df: pd.DataFrame, today=None, days: int = 30) -> dict:
         "current":   _m(curr_df) if not curr_df.empty else None,
         "previous":  _m(prev_df) if not prev_df.empty else None,
     }
+
+
+# ---------------------------------------------------------------------------
+# Feature: Interview stage pass rates
+# ---------------------------------------------------------------------------
+
+def stage_pass_rates(stages_df: pd.DataFrame) -> pd.DataFrame:
+    """Per stage type: passed, failed, pending, pass_rate.
+
+    pass_rate = Passed / (Passed + Failed). None when no decided outcomes.
+    Returns a DataFrame with columns: stage, passed, failed, pending, pass_rate.
+    Only returns rows for stage types that have at least one entry.
+    """
+    if stages_df is None or stages_df.empty:
+        return pd.DataFrame(columns=["stage", "passed", "failed", "pending", "pass_rate"])
+
+    rows = []
+    for stage in STAGE_TYPES:
+        sub = stages_df[stages_df["stage"] == stage]
+        if sub.empty:
+            continue
+        passed  = int((sub["outcome"] == "Passed").sum())
+        failed  = int((sub["outcome"] == "Failed").sum())
+        pending = int(sub["outcome"].isin({"Scheduled", "Pending"}).sum())
+        decided = passed + failed
+        pass_rate = (passed / decided) if decided > 0 else None
+        rows.append({
+            "stage":     stage,
+            "passed":    passed,
+            "failed":    failed,
+            "pending":   pending,
+            "pass_rate": pass_rate,
+        })
+    return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------------------
+# Feature: Latest match scores per application
+# ---------------------------------------------------------------------------
+
+def latest_match_scores(scores_df: pd.DataFrame) -> pd.DataFrame:
+    """Return the most recent score scan per application_id.
+
+    Returns one row per application, keeping all columns from the latest scan.
+    """
+    if scores_df is None or scores_df.empty:
+        return pd.DataFrame(columns=["application_id", "overall_score"])
+    return (
+        scores_df
+        .sort_values("scanned_at", ascending=False)
+        .drop_duplicates(subset=["application_id"])
+        .reset_index(drop=True)
+    )

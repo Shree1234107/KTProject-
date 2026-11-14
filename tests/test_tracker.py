@@ -467,3 +467,294 @@ def test_period_comparison_has_trend_above_threshold():
     assert pc["has_trend"] is True
     assert pc["current"]["total"] == 5
     assert pc["previous"]["total"] == 5
+
+
+# ---------------------------------------------------------------------------
+# Feature: Interview stages — db CRUD
+# ---------------------------------------------------------------------------
+
+def test_add_and_load_stage(conn):
+    app_id = db.add_application(conn, "ACME", "Eng")
+    stage_id = db.add_stage(conn, app_id, "Technical", "2026-06-01", "Passed", "Good interview")
+    assert isinstance(stage_id, int)
+    stages = db.load_stages(conn, app_id)
+    assert len(stages) == 1
+    row = stages.iloc[0]
+    assert row["stage"] == "Technical"
+    assert row["outcome"] == "Passed"
+    assert row["notes"] == "Good interview"
+
+
+def test_add_stage_defaults_to_scheduled(conn):
+    app_id = db.add_application(conn, "ACME", "Eng")
+    db.add_stage(conn, app_id, "Recruiter screen")
+    stages = db.load_stages(conn, app_id)
+    assert stages.iloc[0]["outcome"] == "Scheduled"
+
+
+def test_update_stage(conn):
+    app_id = db.add_application(conn, "ACME", "Eng")
+    stage_id = db.add_stage(conn, app_id, "Technical", "2026-06-01", "Scheduled")
+    db.update_stage(conn, stage_id, outcome="Passed")
+    stages = db.load_stages(conn, app_id)
+    assert stages.iloc[0]["outcome"] == "Passed"
+
+
+def test_delete_stage(conn):
+    app_id = db.add_application(conn, "ACME", "Eng")
+    stage_id = db.add_stage(conn, app_id, "Technical", "2026-06-01", "Passed")
+    db.delete_stage(conn, stage_id)
+    assert db.load_stages(conn, app_id).empty
+
+
+def test_load_stages_all(conn):
+    id1 = db.add_application(conn, "ACME1", "Eng")
+    id2 = db.add_application(conn, "ACME2", "Eng")
+    db.add_stage(conn, id1, "Technical")
+    db.add_stage(conn, id2, "Behavioral")
+    all_stages = db.load_stages(conn)
+    assert len(all_stages) == 2
+
+
+def test_delete_application_cascades_stages(conn):
+    app_id = db.add_application(conn, "ACME", "Eng")
+    db.add_stage(conn, app_id, "Technical", "2026-06-01", "Passed")
+    db.delete_application(conn, app_id)
+    assert db.load_stages(conn).empty
+    assert db.load_applications(conn).empty
+
+
+def test_stage_validates_type(conn):
+    app_id = db.add_application(conn, "ACME", "Eng")
+    with pytest.raises(ValueError, match="Invalid stage type"):
+        db.add_stage(conn, app_id, "InvalidType")
+
+
+def test_stage_validates_outcome(conn):
+    app_id = db.add_application(conn, "ACME", "Eng")
+    with pytest.raises(ValueError, match="Invalid outcome"):
+        db.add_stage(conn, app_id, "Technical", outcome="Done")
+
+
+def test_stage_validates_app_exists(conn):
+    with pytest.raises(ValueError, match="not found"):
+        db.add_stage(conn, 999999, "Technical")
+
+
+def test_update_stage_validates_type(conn):
+    app_id = db.add_application(conn, "ACME", "Eng")
+    stage_id = db.add_stage(conn, app_id, "Technical")
+    with pytest.raises(ValueError, match="Invalid stage type"):
+        db.update_stage(conn, stage_id, stage="Bogus")
+
+
+def test_update_stage_validates_outcome(conn):
+    app_id = db.add_application(conn, "ACME", "Eng")
+    stage_id = db.add_stage(conn, app_id, "Technical")
+    with pytest.raises(ValueError, match="Invalid outcome"):
+        db.update_stage(conn, stage_id, outcome="Done")
+
+
+def test_clear_sample_data_removes_stages(conn):
+    app_id = db.add_application(conn, "RealCo", "Eng")
+    db.add_stage(conn, app_id, "Technical", is_sample=False)
+    db.load_sample_data(conn)
+    db.clear_sample_data(conn)
+    # Real app + its stage must survive
+    assert len(db.load_applications(conn)) == 1
+    stages = db.load_stages(conn)
+    assert all(not bool(r["is_sample"]) for _, r in stages.iterrows())
+
+
+def test_clear_all_data_removes_stages(conn):
+    app_id = db.add_application(conn, "ACME", "Eng")
+    db.add_stage(conn, app_id, "Technical")
+    db.clear_all_data(conn)
+    assert db.load_applications(conn).empty
+    assert db.load_stages(conn).empty
+
+
+# ---------------------------------------------------------------------------
+# Feature: Interview stages — analytics
+# ---------------------------------------------------------------------------
+
+def test_summary_counts_stage_app_as_responded(conn):
+    app_id = db.add_application(conn, "ACME", "Eng", status="Applied")
+    db.add_stage(conn, app_id, "Recruiter screen", "2026-06-01", "Scheduled")
+    df = db.load_applications(conn)
+    stages = db.load_stages(conn)
+    s = analytics.summary(df, stages)
+    assert s["response_rate"] == 1.0
+
+
+def test_summary_counts_stage_app_as_interviewed(conn):
+    app_id = db.add_application(conn, "ACME", "Eng", status="Applied")
+    db.add_stage(conn, app_id, "Technical", "2026-06-01", "Passed")
+    df = db.load_applications(conn)
+    stages = db.load_stages(conn)
+    s = analytics.summary(df, stages)
+    assert s["interview_rate"] == 1.0
+
+
+def test_summary_no_double_counting_with_stages(conn):
+    # App already at Interview: should still count exactly once
+    app_id = db.add_application(conn, "ACME", "Eng", status="Interview")
+    db.add_stage(conn, app_id, "Technical", "2026-06-01", "Passed")
+    df = db.load_applications(conn)
+    stages = db.load_stages(conn)
+    s = analytics.summary(df, stages)
+    assert s["response_rate"] == 1.0
+    assert s["interview_rate"] == 1.0
+
+
+def test_funnel_counts_stage_app(conn):
+    # Applied-status app with a stage should count as responded AND interviewed
+    app_id = db.add_application(conn, "ACME", "Eng", status="Applied")
+    db.add_stage(conn, app_id, "Technical", "2026-06-01", "Passed")
+    df = db.load_applications(conn)
+    stages = db.load_stages(conn)
+    f = analytics.funnel(df, stages)
+    assert f["responded"] == 1
+    assert f["interviewed"] == 1
+
+
+def test_stage_pass_rates_empty():
+    pr = analytics.stage_pass_rates(pd.DataFrame(columns=["stage", "outcome"]))
+    assert pr.empty
+
+
+def test_stage_pass_rates_basic():
+    stages = pd.DataFrame({
+        "stage":   ["Technical", "Technical", "Technical"],
+        "outcome": ["Passed",    "Failed",    "Pending"],
+    })
+    pr = analytics.stage_pass_rates(stages)
+    row = pr[pr["stage"] == "Technical"].iloc[0]
+    assert row["passed"]  == 1
+    assert row["failed"]  == 1
+    assert row["pending"] == 1
+    assert abs(row["pass_rate"] - 0.5) < 1e-9
+
+
+def test_stage_pass_rates_undecided_only():
+    stages = pd.DataFrame({
+        "stage":   ["Recruiter screen"],
+        "outcome": ["Scheduled"],
+    })
+    pr = analytics.stage_pass_rates(stages)
+    row = pr[pr["stage"] == "Recruiter screen"].iloc[0]
+    assert row["pass_rate"] is None
+    assert row["pending"] == 1
+
+
+def test_stage_pass_rates_respects_stage_type_order():
+    stages = pd.DataFrame({
+        "stage":   ["Onsite/Final", "Technical"],
+        "outcome": ["Passed",       "Passed"],
+    })
+    pr = analytics.stage_pass_rates(stages)
+    # Order should follow STAGE_TYPES (Technical before Onsite/Final)
+    idx_tech   = pr[pr["stage"] == "Technical"].index[0]
+    idx_onsite = pr[pr["stage"] == "Onsite/Final"].index[0]
+    assert idx_tech < idx_onsite
+
+
+# ---------------------------------------------------------------------------
+# Feature: Resume match scores — db CRUD
+# ---------------------------------------------------------------------------
+
+def test_add_and_load_match_score(conn):
+    app_id = db.add_application(conn, "ACME", "Eng")
+    db.add_match_score(conn, app_id, 72.0, 68.0, 78.0, 15, 4,
+                       ["kubernetes", "terraform"], "demo.pdf")
+    scores = db.load_match_scores(conn, app_id)
+    assert len(scores) == 1
+    row = scores.iloc[0]
+    assert row["overall_score"] == 72.0
+    assert row["keyword_score"] == 68.0
+    assert row["resume_label"] == "demo.pdf"
+
+
+def test_delete_match_score(conn):
+    app_id = db.add_application(conn, "ACME", "Eng")
+    db.add_match_score(conn, app_id, 72.0, 68.0, 78.0, 15, 4, [], "demo")
+    scores = db.load_match_scores(conn, app_id)
+    score_id = int(scores.iloc[0]["id"])
+    db.delete_match_score(conn, score_id)
+    assert db.load_match_scores(conn, app_id).empty
+
+
+def test_delete_application_cascades_match_scores(conn):
+    app_id = db.add_application(conn, "ACME", "Eng")
+    db.add_match_score(conn, app_id, 72.0, 68.0, 78.0, 15, 4, [], "demo")
+    db.delete_application(conn, app_id)
+    assert db.load_match_scores(conn).empty
+
+
+def test_match_score_validates_app_exists(conn):
+    with pytest.raises(ValueError, match="not found"):
+        db.add_match_score(conn, 999999, 72.0, 68.0, 78.0, 15, 4, [], "demo")
+
+
+def test_load_match_scores_all(conn):
+    id1 = db.add_application(conn, "Co1", "Eng")
+    id2 = db.add_application(conn, "Co2", "Eng")
+    db.add_match_score(conn, id1, 60.0, 58.0, 64.0, 10, 5, [], "r1")
+    db.add_match_score(conn, id2, 80.0, 78.0, 84.0, 18, 2, [], "r2")
+    all_scores = db.load_match_scores(conn)
+    assert len(all_scores) == 2
+
+
+def test_clear_all_data_removes_match_scores(conn):
+    app_id = db.add_application(conn, "ACME", "Eng")
+    db.add_match_score(conn, app_id, 72.0, 68.0, 78.0, 15, 4, [], "demo")
+    db.clear_all_data(conn)
+    assert db.load_match_scores(conn).empty
+
+
+def test_clear_sample_data_removes_sample_scores(conn):
+    app_id = db.add_application(conn, "RealCo", "Eng")
+    db.add_match_score(conn, app_id, 72.0, 68.0, 78.0, 15, 4, [], "demo", is_sample=False)
+    db.load_sample_data(conn)
+    db.clear_sample_data(conn)
+    # Real score must survive
+    scores = db.load_match_scores(conn)
+    assert len(scores) == 1
+    assert not bool(scores.iloc[0]["is_sample"])
+
+
+# ---------------------------------------------------------------------------
+# Feature: Resume match scores — analytics
+# ---------------------------------------------------------------------------
+
+def test_latest_match_scores_returns_most_recent():
+    scores = pd.DataFrame({
+        "application_id": [1, 1],
+        "overall_score":  [60.0, 72.0],
+        "scanned_at": [pd.Timestamp("2026-01-01"), pd.Timestamp("2026-02-01")],
+    })
+    latest = analytics.latest_match_scores(scores)
+    assert len(latest) == 1
+    assert latest.iloc[0]["overall_score"] == 72.0
+
+
+def test_latest_match_scores_multiple_apps():
+    scores = pd.DataFrame({
+        "application_id": [1, 2, 1],
+        "overall_score":  [60.0, 80.0, 72.0],
+        "scanned_at": [
+            pd.Timestamp("2026-01-01"),
+            pd.Timestamp("2026-01-15"),
+            pd.Timestamp("2026-02-01"),
+        ],
+    })
+    latest = analytics.latest_match_scores(scores)
+    assert len(latest) == 2
+    score_map = dict(zip(latest["application_id"], latest["overall_score"]))
+    assert score_map[1] == 72.0
+    assert score_map[2] == 80.0
+
+
+def test_latest_match_scores_empty():
+    result = analytics.latest_match_scores(pd.DataFrame())
+    assert result.empty
