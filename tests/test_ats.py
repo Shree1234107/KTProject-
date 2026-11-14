@@ -148,6 +148,10 @@ def test_build_report_contains_key_fields():
     assert "pmp" in md
     assert "Add a Skills section" in md
     assert "Only add skills you actually have" in md
+    assert "Present" in md   # summary/experience/education are True
+    assert "Missing" in md   # skills is False
+    assert "✅" not in md
+    assert "❌" not in md
 
 
 def test_build_report_escapes_html_in_keywords():

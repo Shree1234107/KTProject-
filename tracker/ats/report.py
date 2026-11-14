@@ -101,8 +101,8 @@ def build_report(result: dict) -> str:
         ("skills", "Skills"),
     ]
     for key, label in _SECTION_LABELS:
-        icon = "✅" if sections.get(key) else "❌"
-        lines.append(f"- {icon} {label}")
+        icon = "Present" if sections.get(key) else "Missing"
+        lines.append(f"- {icon}: {label}")
 
     lines += ["", "## Improvement Tips"]
     for i, tip in enumerate(tips or ["No major issues found."], 1):
