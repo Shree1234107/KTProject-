@@ -110,3 +110,199 @@ def stale_applications(df: pd.DataFrame, today=None, days: int = 21) -> pd.DataF
     stale = applied[applied["date_applied"] <= cutoff].copy()
     stale["days_waiting"] = (today_ts - stale["date_applied"]).dt.days.astype(int)
     return stale.sort_values("days_waiting", ascending=False)
+
+
+# ---------------------------------------------------------------------------
+# Feature: Kanban board helpers
+# ---------------------------------------------------------------------------
+
+_PIPELINE = ["Wishlist", "Applied", "OA/Screen", "Interview", "Offer"]
+
+
+def next_status(status: str) -> "str | None":
+    """Next stage in the pipeline, or None if already at Offer or not in pipeline."""
+    try:
+        idx = _PIPELINE.index(status)
+        return _PIPELINE[idx + 1] if idx < len(_PIPELINE) - 1 else None
+    except ValueError:
+        return None
+
+
+def prev_status(status: str) -> "str | None":
+    """Previous stage in the pipeline, or None if at Wishlist or not in pipeline."""
+    try:
+        idx = _PIPELINE.index(status)
+        return _PIPELINE[idx - 1] if idx > 0 else None
+    except ValueError:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Feature: Application heatmap
+# ---------------------------------------------------------------------------
+
+def applications_per_day(df: pd.DataFrame, today=None, weeks: int = 26) -> dict:
+    """Count submitted (non-Wishlist) applications per calendar day.
+
+    Returns a ``{date: count}`` dict for the last *weeks* weeks ending on
+    *today*. Dates with zero applications are absent from the dict.
+    """
+    today_ts = pd.Timestamp(today or pd.Timestamp.today().normalize())
+    start_ts = today_ts - pd.Timedelta(weeks=weeks)
+
+    submitted = df[df["status"] != "Wishlist"].dropna(subset=["date_applied"])
+    if submitted.empty:
+        return {}
+
+    in_win = submitted[
+        (submitted["date_applied"] >= start_ts) &
+        (submitted["date_applied"] <= today_ts)
+    ]
+    if in_win.empty:
+        return {}
+
+    counts = in_win["date_applied"].dt.normalize().value_counts()
+    return {ts.date(): int(c) for ts, c in counts.items()}
+
+
+# ---------------------------------------------------------------------------
+# Feature: Funnel chart
+# ---------------------------------------------------------------------------
+
+def funnel(df: pd.DataFrame) -> dict:
+    """Compute pipeline funnel counts and step-conversion rates.
+
+    Returns applied / responded / interviewed / offered counts plus
+    ``pct_responded``, ``pct_interviewed``, ``pct_offered`` as fractions
+    relative to *applied*.
+    """
+    submitted = df[df["status"].isin(SUBMITTED)]
+    n = len(submitted)
+    if n == 0:
+        return {
+            "applied": 0, "responded": 0, "interviewed": 0, "offered": 0,
+            "pct_responded": 0.0, "pct_interviewed": 0.0, "pct_offered": 0.0,
+        }
+    responded   = int(submitted["status"].isin(ADVANCED | {"Rejected"}).sum())
+    interviewed = int(submitted["status"].isin({"Interview", "Offer"}).sum())
+    offered     = int((submitted["status"] == "Offer").sum())
+    return {
+        "applied":           n,
+        "responded":         responded,
+        "interviewed":       interviewed,
+        "offered":           offered,
+        "pct_responded":     responded   / n,
+        "pct_interviewed":   interviewed / n,
+        "pct_offered":       offered     / n,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Feature: Weekly goal and streak
+# ---------------------------------------------------------------------------
+
+def weekly_progress(df: pd.DataFrame, goal: int, today=None) -> dict:
+    """Count non-Wishlist applications submitted in the current Mon-Sun week.
+
+    Returns ``{"count": int, "goal": int, "met": bool}``.
+    """
+    today_ts = pd.Timestamp(today or pd.Timestamp.today().normalize())
+    week_start = today_ts - pd.Timedelta(days=today_ts.day_of_week)
+    week_end   = week_start + pd.Timedelta(days=6)
+
+    submitted = df[df["status"] != "Wishlist"].dropna(subset=["date_applied"])
+    count = int(submitted[
+        (submitted["date_applied"] >= week_start) &
+        (submitted["date_applied"] <= week_end)
+    ].shape[0])
+    return {"count": count, "goal": goal, "met": count >= goal}
+
+
+def goal_streak(df: pd.DataFrame, goal: int, today=None) -> dict:
+    """Return current and longest streak of Mon-Sun weeks meeting *goal*.
+
+    The current (incomplete) week is included once its count has reached
+    the goal. Returns ``{"current": int, "longest": int}``.
+    """
+    today_ts = pd.Timestamp(today or pd.Timestamp.today().normalize())
+    this_mon  = today_ts - pd.Timedelta(days=today_ts.day_of_week)
+
+    submitted = df[df["status"] != "Wishlist"].dropna(subset=["date_applied"])
+    if submitted.empty:
+        return {"current": 0, "longest": 0}
+
+    earliest     = submitted["date_applied"].min()
+    earliest_mon = earliest - pd.Timedelta(days=earliest.day_of_week)
+
+    def _week_met(w_start):
+        w_end = w_start + pd.Timedelta(days=6)
+        return int(submitted[
+            (submitted["date_applied"] >= w_start) &
+            (submitted["date_applied"] <= w_end)
+        ].shape[0]) >= goal
+
+    seq = []
+    w = this_mon
+    while w >= earliest_mon and len(seq) < 260:
+        seq.append(_week_met(w))
+        w -= pd.Timedelta(weeks=1)
+
+    current = 0
+    for met in seq:
+        if met:
+            current += 1
+        else:
+            break
+
+    longest = run = 0
+    for met in seq:
+        if met:
+            run += 1
+            longest = max(longest, run)
+        else:
+            run = 0
+
+    return {"current": current, "longest": longest}
+
+
+# ---------------------------------------------------------------------------
+# Feature: Period comparison (trend tiles)
+# ---------------------------------------------------------------------------
+
+def period_comparison(df: pd.DataFrame, today=None, days: int = 30) -> dict:
+    """Compare key metrics for the last *days* days vs the *days* days before.
+
+    Returns::
+
+        {
+          "has_trend": bool,  # True only if both windows have data
+          "current":  {total, response_rate, interview_rate, offers} | None,
+          "previous": {total, response_rate, interview_rate, offers} | None,
+        }
+    """
+    today_ts   = pd.Timestamp(today or pd.Timestamp.today().normalize())
+    curr_start = today_ts - pd.Timedelta(days=days)
+    prev_start = curr_start - pd.Timedelta(days=days)
+
+    dated = df.dropna(subset=["date_applied"])
+
+    curr_df = dated[dated["date_applied"] >= curr_start]
+    prev_df = dated[
+        (dated["date_applied"] >= prev_start) &
+        (dated["date_applied"] <  curr_start)
+    ]
+
+    def _m(sdf):
+        s = summary(sdf)
+        return {
+            "total":         s["total"],
+            "response_rate": s["response_rate"],
+            "interview_rate":s["interview_rate"],
+            "offers":        s["offers"],
+        }
+
+    return {
+        "has_trend": not curr_df.empty and not prev_df.empty,
+        "current":   _m(curr_df) if not curr_df.empty else None,
+        "previous":  _m(prev_df) if not prev_df.empty else None,
+    }

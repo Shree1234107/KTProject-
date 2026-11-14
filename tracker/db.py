@@ -7,6 +7,13 @@ import pandas as pd
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "tracker.db"
 
+_SETTINGS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+)
+"""
+
 STATUSES = ["Wishlist", "Applied", "OA/Screen", "Interview", "Offer", "Rejected", "Withdrawn"]
 
 COLUMNS = [
@@ -56,6 +63,7 @@ def connect(path=None):
     conn = sqlite3.connect(p)
     conn.row_factory = sqlite3.Row
     conn.execute(SCHEMA)
+    conn.execute(_SETTINGS_SCHEMA)
     _migrate(conn)
     return conn
 
@@ -169,4 +177,23 @@ def clear_sample_data(conn) -> None:
 def clear_all_data(conn) -> None:
     """Remove every application row."""
     conn.execute("DELETE FROM applications")
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Settings (key/value persistence)
+# ---------------------------------------------------------------------------
+
+def get_setting(conn, key: str, default: str = "") -> str:
+    """Return the stored value for *key*, or *default* if not set."""
+    row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_setting(conn, key: str, value: str) -> None:
+    """Upsert a key/value pair into the settings table."""
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+        (key, value),
+    )
     conn.commit()

@@ -217,3 +217,230 @@ def test_clear_all_data(conn):
     db.load_sample_data(conn)
     db.clear_all_data(conn)
     assert db.load_applications(conn).empty
+
+
+# ---------------------------------------------------------------------------
+# Feature: Kanban board — next_status / prev_status
+# ---------------------------------------------------------------------------
+
+def test_next_status():
+    assert analytics.next_status("Wishlist")  == "Applied"
+    assert analytics.next_status("Applied")   == "OA/Screen"
+    assert analytics.next_status("OA/Screen") == "Interview"
+    assert analytics.next_status("Interview") == "Offer"
+    assert analytics.next_status("Offer")     is None
+    assert analytics.next_status("Rejected")  is None
+    assert analytics.next_status("Withdrawn") is None
+    assert analytics.next_status("Bogus")     is None
+
+
+def test_prev_status():
+    assert analytics.prev_status("Wishlist")  is None
+    assert analytics.prev_status("Applied")   == "Wishlist"
+    assert analytics.prev_status("OA/Screen") == "Applied"
+    assert analytics.prev_status("Interview") == "OA/Screen"
+    assert analytics.prev_status("Offer")     == "Interview"
+    assert analytics.prev_status("Rejected")  is None
+    assert analytics.prev_status("Withdrawn") is None
+
+
+# ---------------------------------------------------------------------------
+# Feature: Application heatmap — applications_per_day
+# ---------------------------------------------------------------------------
+
+def test_applications_per_day_empty():
+    df = pd.DataFrame(columns=["status", "date_applied"])
+    result = analytics.applications_per_day(df, today="2026-06-01")
+    assert result == {}
+
+
+def test_applications_per_day_wishlist_excluded():
+    df = pd.DataFrame({
+        "id": [1],
+        "status": ["Wishlist"],
+        "date_applied": [pd.Timestamp("2026-05-20")],
+    })
+    result = analytics.applications_per_day(df, today="2026-06-01", weeks=26)
+    assert result == {}
+
+
+def test_applications_per_day_outside_window():
+    df = pd.DataFrame({
+        "id": [1],
+        "status": ["Applied"],
+        "date_applied": [pd.Timestamp("2020-01-01")],  # far outside 26 weeks
+    })
+    result = analytics.applications_per_day(df, today="2026-06-01", weeks=26)
+    assert result == {}
+
+
+def test_applications_per_day_counts():
+    df = pd.DataFrame({
+        "id": [1, 2, 3],
+        "status": ["Applied", "Applied", "Interview"],
+        "date_applied": [
+            pd.Timestamp("2026-05-20"),
+            pd.Timestamp("2026-05-20"),
+            pd.Timestamp("2026-05-21"),
+        ],
+    })
+    result = analytics.applications_per_day(df, today="2026-06-01", weeks=26)
+    import datetime
+    assert result[datetime.date(2026, 5, 20)] == 2
+    assert result[datetime.date(2026, 5, 21)] == 1
+
+
+# ---------------------------------------------------------------------------
+# Feature: Funnel chart — funnel()
+# ---------------------------------------------------------------------------
+
+def test_funnel_empty():
+    f = analytics.funnel(pd.DataFrame(columns=["status"]))
+    assert f["applied"] == 0
+    assert f["pct_responded"] == 0.0
+
+
+def test_funnel_basic(conn):
+    db.add_application(conn, "A", "R", status="Applied")
+    db.add_application(conn, "B", "R", status="OA/Screen")
+    db.add_application(conn, "C", "R", status="Interview")
+    db.add_application(conn, "D", "R", status="Offer")
+    db.add_application(conn, "E", "R", status="Rejected")
+    db.add_application(conn, "W", "R", status="Wishlist")  # excluded
+    df = db.load_applications(conn)
+    f = analytics.funnel(df)
+    assert f["applied"]     == 5   # A B C D E (not W)
+    assert f["responded"]   == 4   # B C D E
+    assert f["interviewed"] == 2   # C D
+    assert f["offered"]     == 1   # D
+    assert abs(f["pct_responded"] - 0.8) < 1e-9
+
+
+def test_funnel_no_division_by_zero():
+    df = pd.DataFrame({"status": ["Wishlist", "Wishlist"]})
+    f = analytics.funnel(df)
+    assert f["applied"] == 0 and f["pct_offered"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Feature: Weekly goal — weekly_progress, goal_streak, settings
+# ---------------------------------------------------------------------------
+
+def test_weekly_progress_counts_this_week():
+    # Monday 2026-06-01
+    df = pd.DataFrame({
+        "id": [1, 2, 3],
+        "status": ["Applied", "Applied", "Wishlist"],
+        "date_applied": [
+            pd.Timestamp("2026-06-01"),  # this week
+            pd.Timestamp("2026-06-03"),  # this week
+            pd.Timestamp("2026-06-01"),  # Wishlist — excluded
+        ],
+    })
+    wp = analytics.weekly_progress(df, goal=5, today="2026-06-04")  # Thursday
+    assert wp["count"] == 2
+    assert wp["met"] is False
+
+
+def test_weekly_progress_met():
+    df = pd.DataFrame({
+        "id": [1, 2, 3],
+        "status": ["Applied", "Applied", "Applied"],
+        "date_applied": [
+            pd.Timestamp("2026-06-01"),
+            pd.Timestamp("2026-06-02"),
+            pd.Timestamp("2026-06-03"),
+        ],
+    })
+    wp = analytics.weekly_progress(df, goal=3, today="2026-06-04")
+    assert wp["met"] is True
+
+
+def test_goal_streak_basic():
+    # Provide 3 consecutive weeks with enough apps
+    df = pd.DataFrame({
+        "id": range(6),
+        "status": ["Applied"] * 6,
+        "date_applied": [
+            pd.Timestamp("2026-05-18"),  # 2 weeks ago Mon
+            pd.Timestamp("2026-05-19"),
+            pd.Timestamp("2026-05-25"),  # last week Mon
+            pd.Timestamp("2026-05-26"),
+            pd.Timestamp("2026-06-01"),  # this week Mon
+            pd.Timestamp("2026-06-02"),
+        ],
+    })
+    result = analytics.goal_streak(df, goal=2, today="2026-06-04")
+    assert result["current"] == 3
+    assert result["longest"] >= 3
+
+
+def test_goal_streak_broken():
+    # Gap in the middle (week of May 25 has only 1 app, goal is 2)
+    df = pd.DataFrame({
+        "id": range(5),
+        "status": ["Applied"] * 5,
+        "date_applied": [
+            pd.Timestamp("2026-05-18"),  # 2 weeks ago — 2 apps
+            pd.Timestamp("2026-05-19"),
+            pd.Timestamp("2026-05-25"),  # last week — 1 app (not met)
+            pd.Timestamp("2026-06-01"),  # this week — 2 apps (met)
+            pd.Timestamp("2026-06-02"),
+        ],
+    })
+    result = analytics.goal_streak(df, goal=2, today="2026-06-04")
+    # Current streak: this week met (1), last week not met → streak = 1
+    assert result["current"] == 1
+
+
+def test_goal_streak_empty():
+    df = pd.DataFrame(columns=["status", "date_applied"])
+    result = analytics.goal_streak(df, goal=5, today="2026-06-01")
+    assert result["current"] == 0 and result["longest"] == 0
+
+
+def test_settings_get_set(conn):
+    assert db.get_setting(conn, "weekly_goal", "10") == "10"
+    db.set_setting(conn, "weekly_goal", "7")
+    assert db.get_setting(conn, "weekly_goal", "10") == "7"
+    # Update existing key
+    db.set_setting(conn, "weekly_goal", "15")
+    assert db.get_setting(conn, "weekly_goal") == "15"
+
+
+# ---------------------------------------------------------------------------
+# Feature: Period comparison — period_comparison
+# ---------------------------------------------------------------------------
+
+def test_period_comparison_no_data():
+    df = pd.DataFrame(columns=["status", "date_applied"])
+    pc = analytics.period_comparison(df, today="2026-06-01")
+    assert pc["has_trend"] is False
+    assert pc["current"] is None and pc["previous"] is None
+
+
+def test_period_comparison_only_current():
+    df = pd.DataFrame({
+        "id": [1],
+        "status": ["Applied"],
+        "date_applied": [pd.Timestamp("2026-05-20")],  # within last 30 days of 2026-06-01
+    })
+    pc = analytics.period_comparison(df, today="2026-06-01", days=30)
+    assert pc["has_trend"] is False   # no data in previous window
+    assert pc["current"] is not None
+    assert pc["current"]["total"] == 1
+
+
+def test_period_comparison_both_windows():
+    df = pd.DataFrame({
+        "id": [1, 2],
+        "status": ["Applied", "Interview"],
+        "date_applied": [
+            pd.Timestamp("2026-05-20"),  # current window (last 30d from 2026-06-01)
+            pd.Timestamp("2026-04-15"),  # previous window (30-60d ago)
+        ],
+    })
+    pc = analytics.period_comparison(df, today="2026-06-01", days=30)
+    assert pc["has_trend"] is True
+    assert pc["current"]["total"] == 1
+    assert pc["previous"]["total"] == 1
