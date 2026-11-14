@@ -52,7 +52,11 @@ Status key: **Built** = works today, **Planned** = agreed in the project plan, *
 | Referral tracking | Referrer name and contact per application; compare referred vs. cold response rates | Built |
 | Interview stages | Log each round (recruiter screen, online assessment, technical, behavioral, take-home, onsite/final) with date and outcome (Scheduled, Passed, Failed, Pending) | Planned |
 | Follow-up reminders | Follow-up date per application; a Reminders tab listing overdue, due today and upcoming items, with mark done and snooze 3 or 7 days; flags applications with no reply after 21+ days | Built |
-| Response-rate visuals | Funnel (Applied, Responded, Interviewed, Offer), response rate by source, referred vs. cold, pass rate per stage, applications per week | Planned |
+| Kanban board | Drag-free board tab with one column per status; move cards forward/back/to rejected; "Show N more" for long columns; withdrawn apps in a collapsed expander | Built |
+| Activity heatmap | GitHub-style 26-week calendar grid on the Dashboard; cell shading by application count per day | Built |
+| Funnel chart | Horizontal bars Applied → Responded → Interviewed → Offer with conversion rates | Built |
+| Weekly goal | Persistent weekly application target; progress bar; current and longest streak | Built |
+| Stat tiles | Big-number header row with trend indicators (▲ / ▼) vs the previous 30 days | Built |
 | Sample data | A button that loads demo data so a fresh clone has something to show | Built |
 | ICS export | Download reminders as a calendar file to import by hand | Proposed |
 
@@ -97,7 +101,6 @@ To add skills or aliases, edit `tracker/ats/data/skills.json`.
 
 ### Later
 - **Interview stages** *(planned)*: log each round with date and outcome.
-- **Response-rate visuals** *(planned)*: funnel, rate by source, pass rate per stage.
 - **ICS export** *(proposed)*: download reminders as a calendar file.
 - **Resume Matcher + tracker link** *(proposed)*: save a match score against an application.
 - Open decisions from the plan: branches with PRs or pushing straight to `main`, Plotly or built-in charts, and any extra fields (salary, job link, recruiter email).
