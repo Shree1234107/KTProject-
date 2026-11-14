@@ -182,18 +182,21 @@ def funnel(df: pd.DataFrame) -> dict:
         return {
             "applied": 0, "responded": 0, "interviewed": 0, "offered": 0,
             "pct_responded": 0.0, "pct_interviewed": 0.0, "pct_offered": 0.0,
+            "pct_step_interviewed": 0.0, "pct_step_offered": 0.0,
         }
     responded   = int(submitted["status"].isin(ADVANCED | {"Rejected"}).sum())
     interviewed = int(submitted["status"].isin({"Interview", "Offer"}).sum())
     offered     = int((submitted["status"] == "Offer").sum())
     return {
-        "applied":           n,
-        "responded":         responded,
-        "interviewed":       interviewed,
-        "offered":           offered,
-        "pct_responded":     responded   / n,
-        "pct_interviewed":   interviewed / n,
-        "pct_offered":       offered     / n,
+        "applied":               n,
+        "responded":             responded,
+        "interviewed":           interviewed,
+        "offered":               offered,
+        "pct_responded":         responded   / n,
+        "pct_interviewed":       interviewed / n,
+        "pct_offered":           offered     / n,
+        "pct_step_interviewed":  interviewed / responded  if responded   > 0 else 0.0,
+        "pct_step_offered":      offered     / interviewed if interviewed > 0 else 0.0,
     }
 
 
@@ -301,8 +304,12 @@ def period_comparison(df: pd.DataFrame, today=None, days: int = 30) -> dict:
             "offers":        s["offers"],
         }
 
+    _TREND_MIN = 5
+    curr_sub = int(curr_df["status"].isin(SUBMITTED).sum()) if not curr_df.empty else 0
+    prev_sub = int(prev_df["status"].isin(SUBMITTED).sum()) if not prev_df.empty else 0
+
     return {
-        "has_trend": not curr_df.empty and not prev_df.empty,
+        "has_trend": curr_sub >= _TREND_MIN and prev_sub >= _TREND_MIN,
         "current":   _m(curr_df) if not curr_df.empty else None,
         "previous":  _m(prev_df) if not prev_df.empty else None,
     }

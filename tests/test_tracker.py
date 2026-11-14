@@ -298,6 +298,8 @@ def test_funnel_empty():
     f = analytics.funnel(pd.DataFrame(columns=["status"]))
     assert f["applied"] == 0
     assert f["pct_responded"] == 0.0
+    assert f["pct_step_interviewed"] == 0.0
+    assert f["pct_step_offered"] == 0.0
 
 
 def test_funnel_basic(conn):
@@ -314,12 +316,15 @@ def test_funnel_basic(conn):
     assert f["interviewed"] == 2   # C D
     assert f["offered"]     == 1   # D
     assert abs(f["pct_responded"] - 0.8) < 1e-9
+    assert abs(f["pct_step_interviewed"] - 0.5) < 1e-9   # 2/4
+    assert abs(f["pct_step_offered"]     - 0.5) < 1e-9   # 1/2
 
 
 def test_funnel_no_division_by_zero():
     df = pd.DataFrame({"status": ["Wishlist", "Wishlist"]})
     f = analytics.funnel(df)
     assert f["applied"] == 0 and f["pct_offered"] == 0.0
+    assert f["pct_step_interviewed"] == 0.0 and f["pct_step_offered"] == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -431,7 +436,8 @@ def test_period_comparison_only_current():
     assert pc["current"]["total"] == 1
 
 
-def test_period_comparison_both_windows():
+def test_period_comparison_below_threshold():
+    # Both windows have data but fewer than 5 submitted apps each → no trend
     df = pd.DataFrame({
         "id": [1, 2],
         "status": ["Applied", "Interview"],
@@ -441,6 +447,23 @@ def test_period_comparison_both_windows():
         ],
     })
     pc = analytics.period_comparison(df, today="2026-06-01", days=30)
-    assert pc["has_trend"] is True
+    assert pc["has_trend"] is False   # < 5 submitted in each window
+    assert pc["current"] is not None
     assert pc["current"]["total"] == 1
+    assert pc["previous"] is not None
     assert pc["previous"]["total"] == 1
+
+
+def test_period_comparison_has_trend_above_threshold():
+    # 5+ submitted (non-Wishlist) apps in each window → has_trend True
+    dates_curr = [pd.Timestamp("2026-05-20") + pd.Timedelta(days=i) for i in range(5)]
+    dates_prev = [pd.Timestamp("2026-04-10") + pd.Timedelta(days=i) for i in range(5)]
+    df = pd.DataFrame({
+        "id": range(10),
+        "status": ["Applied"] * 10,
+        "date_applied": dates_curr + dates_prev,
+    })
+    pc = analytics.period_comparison(df, today="2026-06-01", days=30)
+    assert pc["has_trend"] is True
+    assert pc["current"]["total"] == 5
+    assert pc["previous"]["total"] == 5
