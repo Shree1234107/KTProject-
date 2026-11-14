@@ -2,6 +2,7 @@
 import datetime as dt
 import html as _html
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -66,19 +67,31 @@ _today_str = str(_today)
 def _stat_tile(n: int, label: str, value: str, cur, prev, is_rate: bool) -> str:
     """Build one stat tile HTML string with trend indicator."""
     if cur is None or prev is None:
-        trend_html = '<span class="trend-none">no trend yet</span>'
+        trend_html = '<span class="trend-none">not enough data for a trend</span>'
     else:
         diff = cur - prev
         if is_rate:
-            mag = f"{abs(diff * 100):.1f}pp"
+            cur_str = f"{cur:.0%}"
+            mag = abs(diff * 100)
+            if mag < 0.5:
+                change_str, cls = "no change", "trend-flat"
+            elif diff > 0:
+                change_str, cls = f"up {mag:.1f} points", "trend-up"
+            else:
+                change_str, cls = f"down {mag:.1f} points", "trend-down"
         else:
-            mag = str(abs(int(round(diff))))
-        if diff > 0:
-            trend_html = f'<span class="trend-up">&#9650; {mag} vs prev 30d</span>'
-        elif diff < 0:
-            trend_html = f'<span class="trend-down">&#9660; {mag} vs prev 30d</span>'
-        else:
-            trend_html = f'<span class="trend-flat">&#8212; {mag} vs prev 30d</span>'
+            cur_str = str(int(round(cur)))
+            mag = abs(int(round(diff)))
+            if mag == 0:
+                change_str, cls = "no change", "trend-flat"
+            elif diff > 0:
+                change_str, cls = f"up {mag}", "trend-up"
+            else:
+                change_str, cls = f"down {mag}", "trend-down"
+        trend_html = (
+            f'<span class="{cls}">last 30 days: {cur_str} '
+            f'({change_str} from the 30 days before)</span>'
+        )
     return (
         f'<div class="stat-tile stat-tile-{n}">'
         f'<div class="stat-tile-label">{label}</div>'
@@ -154,30 +167,44 @@ def _funnel_html(f: dict) -> str:
         return '<div class="funnel-empty">No submitted applications yet.</div>'
 
     stages = [
-        ("Applied",    f["applied"],    "fn-c0", 100.0),
-        ("Responded",  f["responded"],  "fn-c1", f["pct_responded"]  * 100),
-        ("Interviewed",f["interviewed"],"fn-c2", f["pct_interviewed"] * 100),
-        ("Offer",      f["offered"],    "fn-c3", f["pct_offered"]     * 100),
-    ]
-    convs = [
-        f"{f['pct_responded']:.0%} of applied",
-        f"{f['pct_interviewed']:.0%} of applied",
-        f"{f['pct_offered']:.0%} of applied",
+        ("Applied",     f["applied"],    "fn-c0", 100.0),
+        ("Responded",   f["responded"],  "fn-c1", f["pct_responded"]   * 100),
+        ("Interviewed", f["interviewed"],"fn-c2", f["pct_interviewed"]  * 100),
+        ("Offer",       f["offered"],    "fn-c3", f["pct_offered"]      * 100),
     ]
 
     p = ['<div class="funnel">']
     for i, (lbl, cnt, cls, pct) in enumerate(stages):
-        # ensure at least a sliver for non-zero counts
         w = max(pct, 2.0) if cnt > 0 else 0.0
         p.append(
             f'<div class="funnel-step">'
             f'<div class="funnel-step-label">{lbl}</div>'
             f'<div class="funnel-bar-wrap">'
             f'<div class="funnel-bar {cls}" style="width:{w:.1f}%">{cnt}</div>'
-            f'</div></div>'
+            f'</div>'
         )
-        if i < len(stages) - 1:
-            p.append(f'<div class="funnel-conv">{convs[i]}</div>')
+        # Conversion label: under every bar except Applied (index 0)
+        if i == 1:
+            p.append(
+                f'<div class="funnel-conv">'
+                f'<span class="funnel-conv-main">{f["pct_responded"]:.0%} of applied</span>'
+                f'</div>'
+            )
+        elif i == 2:
+            p.append(
+                f'<div class="funnel-conv">'
+                f'<span class="funnel-conv-main">{f["pct_interviewed"]:.0%} of applied</span>'
+                f'<span class="funnel-conv-step">{f["pct_step_interviewed"]:.0%} of responded</span>'
+                f'</div>'
+            )
+        elif i == 3:
+            p.append(
+                f'<div class="funnel-conv">'
+                f'<span class="funnel-conv-main">{f["pct_offered"]:.0%} of applied</span>'
+                f'<span class="funnel-conv-step">{f["pct_step_offered"]:.0%} of interviewed</span>'
+                f'</div>'
+            )
+        p.append('</div>')
     p.append('</div>')
     return "".join(p)
 
@@ -190,6 +217,39 @@ def _goal_progress_html(wp: dict) -> str:
         f'<div class="goal-track"><div class="goal-fill" style="width:{pct:.1f}%"></div></div>'
         f'<div class="goal-label">{wp["count"]} of {wp["goal"]} this week</div>'
         '</div>'
+    )
+
+
+def _html_table(
+    headers: list,
+    rows: list,
+    numeric_cols: set | None = None,
+    caption: str = "",
+) -> str:
+    """Build a themed HTML table string."""
+    nc = numeric_cols or set()
+    th_cells = "".join(
+        f'<th class="num">{_html.escape(str(h))}</th>' if i in nc
+        else f'<th>{_html.escape(str(h))}</th>'
+        for i, h in enumerate(headers)
+    )
+    body = ""
+    for row in rows:
+        tds = "".join(
+            f'<td class="num">{_html.escape(str(v))}</td>' if i in nc
+            else f'<td>{_html.escape(str(v))}</td>'
+            for i, v in enumerate(row)
+        )
+        body += f"<tr>{tds}</tr>"
+    cap = (
+        f'<p class="tracker-table-caption">{_html.escape(caption)}</p>'
+        if caption else ""
+    )
+    return (
+        '<div class="tracker-table-wrap">'
+        f'<table class="tracker-table"><thead><tr>{th_cells}</tr></thead>'
+        f'<tbody>{body}</tbody></table>'
+        f'{cap}</div>'
     )
 
 
@@ -236,20 +296,18 @@ def _render_board_cards(group: pd.DataFrame, status_name: str) -> None:
         if prv is not None:
             btns.append(("Back", f"bck_{row.id}"))
 
-        if btns:
-            bcols = st.columns(len(btns))
-            for bc, (label, key) in zip(bcols, btns):
-                if bc.button(label, key=key):
-                    if label == "Next stage":
-                        updates: dict = {"status": nxt}
-                        if status_name == "Wishlist" and pd.isna(row.date_applied):
-                            updates["date_applied"] = _today_str
-                        db.update_application(conn, int(row.id), **updates)
-                    elif label == "Reject":
-                        db.update_application(conn, int(row.id), status="Rejected")
-                    else:  # Back
-                        db.update_application(conn, int(row.id), status=prv)
-                    st.rerun()
+        for label, key in btns:
+            if st.button(label, key=key):
+                if label == "Next stage":
+                    updates: dict = {"status": nxt}
+                    if status_name == "Wishlist" and pd.isna(row.date_applied):
+                        updates["date_applied"] = _today_str
+                    db.update_application(conn, int(row.id), **updates)
+                elif label == "Reject":
+                    db.update_application(conn, int(row.id), status="Rejected")
+                else:  # Back
+                    db.update_application(conn, int(row.id), status=prv)
+                st.rerun()
 
 
 # ---------------------------------------------------------------------------
@@ -265,19 +323,21 @@ with tab_dash:
         c_prev = pc["previous"]
 
         # --- Feature 5: stat tile header row ---
+        def _t(key):
+            return c_now[key] if pc["has_trend"] and c_now else None
+
+        def _p(key):
+            return c_prev[key] if pc["has_trend"] and c_prev else None
+
         tiles = "".join([
             _stat_tile(1, "Total", str(s["total"]),
-                       c_now["total"] if c_now else None,
-                       c_prev["total"] if c_prev else None, False),
+                       _t("total"), _p("total"), False),
             _stat_tile(2, "Response rate", f"{s['response_rate']:.0%}",
-                       c_now["response_rate"] if c_now else None,
-                       c_prev["response_rate"] if c_prev else None, True),
+                       _t("response_rate"), _p("response_rate"), True),
             _stat_tile(3, "Interview rate", f"{s['interview_rate']:.0%}",
-                       c_now["interview_rate"] if c_now else None,
-                       c_prev["interview_rate"] if c_prev else None, True),
+                       _t("interview_rate"), _p("interview_rate"), True),
             _stat_tile(4, "Offers", str(s["offers"]),
-                       c_now["offers"] if c_now else None,
-                       c_prev["offers"] if c_prev else None, False),
+                       _t("offers"), _p("offers"), False),
             _stat_tile(5, "Active", str(s["active"]), None, None, False),
         ])
         st.markdown(f'<div class="stat-row">{tiles}</div>', unsafe_allow_html=True)
@@ -307,7 +367,20 @@ with tab_dash:
         # --- Existing pipeline + weekly chart ---
         left, right = st.columns(2)
         left.subheader("Pipeline")
-        left.bar_chart(analytics.status_counts(df), color="#2563eb")
+        sc = analytics.status_counts(df).reset_index()
+        sc.columns = ["Status", "Count"]
+        pipeline_chart = (
+            alt.Chart(sc)
+            .mark_bar(color="#2563eb")
+            .encode(
+                x=alt.X("Status:N", sort=db.STATUSES,
+                         axis=alt.Axis(labelAngle=-30, title="")),
+                y=alt.Y("Count:Q", title=""),
+                tooltip=["Status:N", "Count:Q"],
+            )
+            .properties(height=200)
+        )
+        left.altair_chart(pipeline_chart, use_container_width=True)
         right.subheader("Applications per week")
         weekly = analytics.applications_per_week(df)
         if weekly.empty:
@@ -330,7 +403,22 @@ with tab_dash:
         if src.empty:
             st.caption("Add a source to applications to see this.")
         else:
-            st.dataframe(src, use_container_width=True, hide_index=True)
+            src_rows = [
+                [row.source, row.applications, row.advanced]
+                for row in src.itertuples(index=False)
+            ]
+            st.markdown(
+                _html_table(
+                    ["Source", "Applications", "Advanced to interview"],
+                    src_rows,
+                    numeric_cols={1, 2},
+                    caption=(
+                        '"Advanced to interview" = applications that reached '
+                        "OA/Screen, Interview, or Offer."
+                    ),
+                ),
+                unsafe_allow_html=True,
+            )
 
         st.subheader("Referred vs. Cold")
         rc = analytics.referral_comparison(df)
@@ -339,14 +427,18 @@ with tab_dash:
         else:
             rc_rows = []
             for label, g in [("Referred", rc["referred"]), ("Cold", rc["cold"])]:
-                rc_rows.append({
-                    "Type": label,
-                    "Applications": g["count"],
-                    "Submitted": g["submitted"],
-                    "Response rate": f"{g['response_rate']:.0%}",
-                    "Interview rate": f"{g['interview_rate']:.0%}",
-                })
-            st.dataframe(pd.DataFrame(rc_rows), use_container_width=True, hide_index=True)
+                rc_rows.append([
+                    label, g["count"], g["submitted"],
+                    f'{g["response_rate"]:.0%}', f'{g["interview_rate"]:.0%}',
+                ])
+            st.markdown(
+                _html_table(
+                    ["Type", "Applications", "Submitted", "Response rate", "Interview rate"],
+                    rc_rows,
+                    numeric_cols={1, 2},
+                ),
+                unsafe_allow_html=True,
+            )
 
         st.subheader("Deadlines in the next 14 days")
         dl = analytics.upcoming_deadlines(df)

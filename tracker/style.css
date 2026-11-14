@@ -747,20 +747,20 @@ textarea:focus-visible {
 }
 
 .hm-month-cell {
-  width: 12px;
+  width: 18px;
   font-size: 0.6rem;
   color: var(--c-text-sec);
   flex-shrink: 0;
-  margin-right: 2px;
+  margin-right: 3px;
   overflow: visible;
   white-space: nowrap;
 }
 
 .hm-cell {
-  width: 10px;
-  height: 10px;
+  width: 15px;
+  height: 15px;
   flex-shrink: 0;
-  margin-right: 2px;
+  margin-right: 3px;
   cursor: default;
   transition: opacity 150ms;
 }
@@ -835,10 +835,21 @@ textarea:focus-visible {
 .fn-c3 { background: var(--c-blue-200); color: var(--c-blue-900); }
 
 .funnel-conv {
-  font-size: 0.7rem;
+  padding: 2px 0 6px 6px;
+}
+
+.funnel-conv-main {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 500;
   color: var(--c-text-sec);
-  padding: 2px 0 2px 6px;
-  margin-bottom: 4px;
+}
+
+.funnel-conv-step {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--c-blue-400);
+  margin-top: 1px;
 }
 
 /* ------------------------------------------------------------------ */
@@ -875,4 +886,52 @@ textarea:focus-visible {
   font-weight: 800;
   color: var(--c-blue-700);
   font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ */
+/* 23. Dashboard data tables                                           */
+/* ------------------------------------------------------------------ */
+
+.tracker-table-wrap { overflow-x: auto; margin-bottom: 4px; }
+
+.tracker-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  color: var(--c-text);
+}
+
+.tracker-table th {
+  background: var(--c-blue-50);
+  color: var(--c-text-sec);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 7px 12px;
+  text-align: left;
+  border: 1px solid var(--c-border);
+}
+
+.tracker-table th.num { text-align: right; }
+
+.tracker-table td {
+  padding: 7px 12px;
+  border: 1px solid var(--c-border);
+  vertical-align: middle;
+}
+
+.tracker-table tr:nth-child(even) td {
+  background: var(--c-bg-1);
+}
+
+.tracker-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.tracker-table-caption {
+  font-size: 0.72rem;
+  color: var(--c-text-sec);
+  margin: 4px 0 0;
 }
