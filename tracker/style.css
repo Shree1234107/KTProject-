@@ -1,45 +1,79 @@
 /* ================================================================
  * tracker/style.css — KTProject Internship Tracker visual theme
- * White and blue only. Square. Flat. No shadows. No gradients.
+ * Warm editorial minimalist: ivory page, near-white surfaces,
+ * dark olive accent. Flat — borders over shadows, no gradients.
  * Tested against Streamlit 1.67.0
  *
- * To change a color, update the CSS variable in section 0 below.
- * Data-testid selectors (e.g. [data-testid="stButton"]) are stable
- * across minor Streamlit releases. Avoid targeting st-emotion-cache-*
- * class names — those hash on each build and are not stable.
+ * To change a color, update the design tokens in section 0 below.
+ * The legacy --c-* names are aliases kept so every rule below picks
+ * up the tokens without renaming. Data-testid selectors (e.g.
+ * [data-testid="stButton"]) are stable across minor Streamlit
+ * releases. Avoid targeting st-emotion-cache-* class names.
  * ================================================================ */
 
 /* ------------------------------------------------------------------ */
-/* 0. Palette — CSS variables                                          */
+/* 0. Design tokens                                                    */
 /* ------------------------------------------------------------------ */
 :root {
-  /* Whites */
-  --c-white:  #ffffff;
-  --c-bg-1:   #f8fafc;
-  --c-bg-2:   #f1f5f9;
-  --c-border: #e2e8f0;
+  /* Surfaces */
+  --page-bg:       #F6F3ED;   /* warm ivory, whole viewport          */
+  --surface:       #FCFBF8;   /* near-white content surfaces         */
+  --surface-muted: #EEEAE2;   /* secondary surfaces, hovers          */
+  --surface-hover: #F3EFE7;   /* subtle warm-neutral row hover       */
+  --border:        #E3DED5;
 
-  /* Blues */
-  --c-blue-50:  #eff6ff;
-  --c-blue-100: #dbeafe;
-  --c-blue-200: #bfdbfe;
-  --c-blue-400: #60a5fa;
-  --c-blue-600: #2563eb;
-  --c-blue-700: #1d4ed8;
-  --c-blue-900: #1e3a8a;
+  /* Text — contrast on --surface: primary ~14:1, secondary ~5.8:1  */
+  --text-primary:   #292923;
+  --text-secondary: #66655D;
 
-  /* Text — WCAG AA on white: #0f1f3d contrast ~12:1, #475a7a ~5:1 */
-  --c-text:     #0f1f3d;
-  --c-text-sec: #475a7a;
+  /* Accent — dark olive */
+  --accent:       #4E5947;    /* ~7:1 on --surface                   */
+  --accent-hover: #3D4737;
+  --accent-soft:  #E7EBDD;
+  --accent-faint: #F1F3EA;
+  --accent-line:  #CDD4C0;
+  --accent-mid:   #6B7761;    /* ≥4.5:1 on --surface, used as text   */
+  --accent-deep:  #2F3829;
+
+  /* Radii */
+  --r-control: 7px;           /* buttons, inputs, tags (6–8px)       */
+  --r-surface: 10px;          /* tables, cards, forms, expanders     */
+
+  /* Spacing scale: 4, 8, 12, 16, 24, 32, 48 */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+  --s-5: 24px; --s-6: 32px; --s-7: 48px;
+
+  /* Legacy aliases (do not add new uses — reference tokens above) */
+  --c-white:    var(--surface);
+  --c-bg-1:     var(--surface);
+  --c-bg-2:     var(--surface-muted);
+  --c-border:   var(--border);
+  --c-blue-50:  var(--accent-faint);
+  --c-blue-100: var(--accent-soft);
+  --c-blue-200: var(--accent-line);
+  --c-blue-400: var(--accent-mid);
+  --c-blue-600: var(--accent);
+  --c-blue-700: var(--accent-hover);
+  --c-blue-900: var(--accent-deep);
+  --c-text:     var(--text-primary);
+  --c-text-sec: var(--text-secondary);
 }
 
 /* ------------------------------------------------------------------ */
-/* 1. Base reset: square corners and system font                       */
+/* 1. Base: radii and font                                             */
 /* ------------------------------------------------------------------ */
 
-/* Square corners on every element — intentional, app-wide rule */
-*, *::before, *::after {
-  border-radius: 0 !important;
+/* Controls get 6–8px corners; surfaces get 10px (see later sections) */
+button,
+input,
+textarea,
+[data-baseweb="select"] > div:first-child,
+[data-baseweb="input"],
+[data-baseweb="input"] > div,
+[data-baseweb="tag"],
+[data-baseweb="popover"],
+[data-baseweb="popover"] > div {
+  border-radius: var(--r-control) !important;
 }
 
 html, body,
@@ -55,11 +89,19 @@ button, input, textarea, select,
 /* 2. Typography                                                        */
 /* ------------------------------------------------------------------ */
 
+body, p, li, label {
+  color: var(--text-primary);
+}
+
+/* Main page heading — editorial serif, regular weight */
 h1 {
-  font-size: 1.55rem !important;
-  font-weight: 800 !important;
-  color: var(--c-text) !important;
-  letter-spacing: -0.01em;
+  font-family: Georgia, "Times New Roman", serif !important;
+  font-size: 36px !important;
+  font-weight: 400 !important;
+  line-height: 1.2 !important;
+  color: var(--text-primary) !important;
+  letter-spacing: -0.005em;
+  padding: 0 0 var(--s-3) !important;
 }
 
 /* Section headers as small uppercase labels */
@@ -91,13 +133,32 @@ h3 {
 /* 3. Layout — main area and sidebar                                   */
 /* ------------------------------------------------------------------ */
 
-[data-testid="stAppViewContainer"] {
-  background: var(--c-white);
+/* Warm ivory across the entire viewport, flat */
+html, body,
+.stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+[data-testid="stHeader"],
+[data-testid="stBottom"] > div {
+  background: var(--page-bg) !important;
 }
 
-/* Sidebar: light background, right border */
+/* Centered content column, max ~1200px, 40px desktop padding */
+[data-testid="stMainBlockContainer"],
+.block-container {
+  max-width: 1200px !important;
+  margin: 0 auto !important;
+  padding: var(--s-6) 40px var(--s-7) !important;
+}
+
+/* Sidebar: muted warm surface, right border */
+[data-testid="stSidebar"],
+[data-testid="stSidebar"] > div:first-child {
+  background: var(--surface-muted) !important;
+}
+
 [data-testid="stSidebar"] {
-  border-right: 1px solid var(--c-border) !important;
+  border-right: 1px solid var(--border) !important;
 }
 
 [data-testid="stSidebar"] h2,
@@ -128,28 +189,43 @@ hr {
 [data-baseweb="tab"] {
   background: transparent !important;
   border: none !important;
-  border-right: 1px solid var(--c-border) !important;
-  padding: 8px 18px !important;
-  font-size: 0.82rem !important;
+  border-radius: var(--r-control) var(--r-control) 0 0 !important;
+  padding: var(--s-2) var(--s-4) !important;
+  margin-right: var(--s-1) !important;
+  font-size: 0.9rem !important;
   font-weight: 500 !important;
-  letter-spacing: 0.03em !important;
-  color: var(--c-text-sec) !important;
+  color: var(--text-secondary) !important;
   transition: background 150ms, color 150ms;
 }
 
-[data-baseweb="tab"]:hover {
-  background: var(--c-blue-50) !important;
-  color: var(--c-blue-700) !important;
+[data-baseweb="tab"] p {
+  font-size: 0.9rem !important;
+  color: inherit !important;
 }
 
+[data-baseweb="tab"]:hover {
+  background: var(--surface-muted) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Active tab: dark text, semibold, olive underline — not colour alone */
 [data-baseweb="tab"][aria-selected="true"] {
-  color: var(--c-blue-700) !important;
+  color: var(--text-primary) !important;
   font-weight: 600 !important;
+}
+
+[data-baseweb="tab"][aria-selected="true"] p {
+  font-weight: 600 !important;
+}
+
+[data-baseweb="tab"]:focus-visible {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: -2px !important;
 }
 
 /* Active tab bottom-line indicator */
 [data-baseweb="tab-highlight"] {
-  background: var(--c-blue-600) !important;
+  background: var(--accent) !important;
   height: 2px !important;
 }
 
@@ -184,36 +260,50 @@ button {
   border-color: var(--c-blue-700) !important;
 }
 
-/* Secondary buttons: white with blue border */
+/* Primary/submit button text stays light on olive */
+[data-testid^="stBaseButton"][kind="primary"] p,
+[data-testid="stFormSubmitButton"] button p {
+  color: var(--surface) !important;
+}
+
+/* Secondary buttons: near-white with a subtle border */
 [data-testid^="stBaseButton"][kind="secondary"] {
-  background: var(--c-white) !important;
-  border: 1px solid var(--c-blue-200) !important;
-  color: var(--c-blue-700) !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-primary) !important;
 }
 
 [data-testid^="stBaseButton"][kind="secondary"]:hover {
-  background: var(--c-blue-50) !important;
-  border-color: var(--c-blue-400) !important;
+  background: var(--surface-muted) !important;
+  border-color: var(--accent-line) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-testid^="stBaseButton"]:disabled {
+  opacity: 0.55 !important;
 }
 
 /* Focus outline: visible on keyboard nav */
 button:focus-visible,
 input:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid var(--c-blue-600) !important;
+textarea:focus-visible,
+summary:focus-visible,
+[role="checkbox"]:focus-visible,
+[role="radio"]:focus-visible {
+  outline: 2px solid var(--accent) !important;
   outline-offset: 2px !important;
 }
 
 /* Download buttons share secondary style */
 [data-testid="stDownloadButton"] button {
-  background: var(--c-white) !important;
-  border: 1px solid var(--c-blue-200) !important;
-  color: var(--c-blue-700) !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-primary) !important;
 }
 
 [data-testid="stDownloadButton"] button:hover {
-  background: var(--c-blue-50) !important;
-  border-color: var(--c-blue-400) !important;
+  background: var(--surface-muted) !important;
+  border-color: var(--accent-line) !important;
 }
 
 /* ------------------------------------------------------------------ */
@@ -339,11 +429,17 @@ textarea:focus-visible {
 
 [data-testid="stAlert"],
 [data-baseweb="notification"] {
-  background: var(--c-blue-50) !important;
-  border: 1px solid var(--c-blue-100) !important;
-  border-left: 3px solid var(--c-blue-600) !important;
-  color: var(--c-text) !important;
+  background: var(--accent-faint) !important;
+  border: 1px solid var(--border) !important;
+  border-left: 3px solid var(--accent) !important;
+  border-radius: var(--r-control) !important;
+  color: var(--text-primary) !important;
   box-shadow: none !important;
+}
+
+[data-testid="stAlert"] > div,
+[data-baseweb="notification"] > div {
+  background: transparent !important;
 }
 
 [data-testid="stAlert"] svg,
@@ -356,21 +452,28 @@ textarea:focus-visible {
 /* 11. Expanders                                                       */
 /* ------------------------------------------------------------------ */
 
+[data-testid="stExpander"] details,
 [data-testid="stExpander"] {
-  border: 1px solid var(--c-border) !important;
-  background: var(--c-white) !important;
+  border-color: var(--border) !important;
+  background: var(--surface) !important;
+  border-radius: var(--r-surface) !important;
   box-shadow: none !important;
 }
 
+[data-testid="stExpander"] details {
+  border: 1px solid var(--border) !important;
+  overflow: hidden;
+}
+
 [data-testid="stExpander"] summary {
-  font-size: 0.85rem !important;
-  color: var(--c-text-sec) !important;
-  padding: 10px 14px !important;
+  font-size: 0.9rem !important;
+  color: var(--text-primary) !important;
+  padding: var(--s-3) var(--s-4) !important;
 }
 
 [data-testid="stExpander"] summary:hover {
-  background: var(--c-blue-50) !important;
-  color: var(--c-blue-700) !important;
+  background: var(--surface-hover) !important;
+  color: var(--text-primary) !important;
 }
 
 /* ------------------------------------------------------------------ */
@@ -392,8 +495,19 @@ textarea:focus-visible {
 /* 13. Data tables                                                     */
 /* ------------------------------------------------------------------ */
 
+/* Application table (st.dataframe): almost-white surface, 10px radius.
+   Cell colours, horizontal-only dividers and row hover are set through
+   the [theme] dataframe options in .streamlit/config.toml, because the
+   grid draws on a canvas that CSS cannot reach.                       */
 [data-testid="stDataFrame"] {
-  border: 1px solid var(--c-border) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--r-surface) !important;
+  background: var(--surface) !important;
+  overflow: hidden;
+}
+
+[data-testid="stDataFrame"] > div {
+  border: none !important;
 }
 
 /* ------------------------------------------------------------------ */
@@ -401,10 +515,56 @@ textarea:focus-visible {
 /* ------------------------------------------------------------------ */
 
 [data-testid="stForm"] {
-  border: 1px solid var(--c-border) !important;
-  background: var(--c-bg-1) !important;
-  padding: 20px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--r-surface) !important;
+  background: var(--surface) !important;
+  padding: var(--s-5) !important;
   box-shadow: none !important;
+}
+
+/* Metric / stat / board surfaces share the 10px radius */
+[data-testid="stMetric"],
+.stat-tile,
+.board-card {
+  border-radius: var(--r-surface) !important;
+}
+
+[data-testid="stMetric"] {
+  background: var(--surface) !important;
+}
+
+/* Small tags and chips use control radius */
+.chip,
+.stage-tag,
+.board-match-tag,
+.ats-score-band,
+.section-present,
+.section-missing {
+  border-radius: 999px;
+}
+
+.ats-tip,
+.ats-note,
+.ats-warn {
+  border-radius: var(--r-control);
+}
+
+.goal-track,
+.goal-fill,
+.funnel-bar-wrap,
+.funnel-bar,
+.stage-pass-track,
+.stage-pass-fill,
+[data-testid="stProgress"] > div,
+[data-testid="stProgress"] > div > div {
+  border-radius: 4px;
+}
+
+.hm-cell { border-radius: 3px; }
+
+[data-testid="stFileUploadDropzone"],
+[data-testid="stFileUploaderDropzone"] {
+  border-radius: var(--r-surface) !important;
 }
 
 /* ------------------------------------------------------------------ */
@@ -892,37 +1052,53 @@ textarea:focus-visible {
 /* 23. Dashboard data tables                                           */
 /* ------------------------------------------------------------------ */
 
-.tracker-table-wrap { overflow-x: auto; margin-bottom: 4px; }
+.tracker-table-wrap {
+  overflow-x: auto;
+  margin-bottom: var(--s-1);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-surface);
+}
 
 .tracker-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.85rem;
-  color: var(--c-text);
+  font-size: 0.9rem;
+  color: var(--text-primary);
 }
 
 .tracker-table th {
-  background: var(--c-blue-50);
-  color: var(--c-text-sec);
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 7px 12px;
+  padding: var(--s-3) var(--s-4);
   text-align: left;
-  border: 1px solid var(--c-border);
+  border: none;
+  border-bottom: 1px solid var(--border);
 }
 
 .tracker-table th.num { text-align: right; }
 
+/* Quiet horizontal dividers only — no boxed cells */
 .tracker-table td {
-  padding: 7px 12px;
-  border: 1px solid var(--c-border);
+  padding: var(--s-3) var(--s-4);
+  border: none;
+  border-bottom: 1px solid var(--border);
   vertical-align: middle;
 }
 
-.tracker-table tr:nth-child(even) td {
-  background: var(--c-bg-1);
+.tracker-table tr:last-child td { border-bottom: none; }
+
+.tracker-table tbody tr:hover td {
+  background: var(--surface-hover);
+}
+
+/* First column (company / label) slightly more prominent */
+.tracker-table td:first-child {
+  font-weight: 600;
 }
 
 .tracker-table td.num {
@@ -1065,22 +1241,23 @@ textarea:focus-visible {
   border: 1px solid;
 }
 
+/* Status tags: text label + muted tint (never colour alone) */
 .stage-tag-passed {
-  background: var(--c-blue-600);
-  color: var(--c-white);
-  border-color: var(--c-blue-600);
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  border-color: var(--accent-line);
 }
 
 .stage-tag-failed {
-  background: var(--c-white);
-  color: var(--c-blue-700);
-  border-color: var(--c-blue-200);
+  background: #F3E6E1;
+  color: #6E3B2E;
+  border-color: #E5CFC6;
 }
 
 .stage-tag-sched {
-  background: var(--c-blue-100);
-  color: var(--c-blue-900);
-  border-color: var(--c-blue-200);
+  background: var(--surface-muted);
+  color: var(--text-primary);
+  border-color: var(--border);
 }
 
 .stage-notes {
@@ -1186,4 +1363,160 @@ textarea:focus-visible {
   font-size: 0.7rem;
   color: var(--c-text-sec);
   margin-left: 4px;
+}
+
+/* ------------------------------------------------------------------ */
+/* 26. Board card hierarchy                                            */
+/* ------------------------------------------------------------------ */
+
+.board-card {
+  background: var(--surface);
+  padding: var(--s-3) var(--s-4);
+  transition: background 150ms;
+}
+
+.board-card:hover { background: var(--surface-hover); }
+
+.board-card-company { font-size: 0.95rem; font-weight: 600; }
+.board-card-role    { font-size: 0.85rem; color: var(--text-secondary); }
+.board-card-dates   { color: var(--text-secondary); }
+
+.board-col-header {
+  border-bottom-color: var(--accent);
+}
+
+/* Stat tiles: calmer numerals */
+.stat-tile        { background: var(--surface); padding: var(--s-4); }
+.stat-tile-value  { font-weight: 600; }
+
+/* Small uppercase section headings sit on a quiet divider */
+h3 { border-bottom-color: var(--border) !important; }
+
+/* Checkbox / radio checked state uses the olive accent */
+[data-testid="stCheckbox"] [role="checkbox"][aria-checked="true"] > span,
+[data-baseweb="checkbox"] input:checked + span {
+  background-color: var(--accent) !important;
+  border-color: var(--accent) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* 27. Responsive — mobile                                             */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 640px) {
+  [data-testid="stMainBlockContainer"],
+  .block-container {
+    padding: var(--s-5) var(--s-4) var(--s-6) !important;
+  }
+
+  h1 {
+    font-size: 28px !important;
+  }
+
+  .stat-row {
+    flex-wrap: wrap;
+  }
+
+  .stat-tile {
+    flex: 1 1 calc(50% - 12px);
+  }
+
+  [data-baseweb="tab"] {
+    padding: var(--s-2) var(--s-3) !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 28. Field fill consistency — selects, dates, number steppers        */
+/* ------------------------------------------------------------------ */
+
+[data-baseweb="select"] > div,
+[data-baseweb="base-input"],
+[data-baseweb="base-input"] input,
+[data-testid="stDateInput"] [data-baseweb="input"],
+[data-testid="stNumberInput"] [data-baseweb="input"],
+[data-testid="stNumberInput"] button {
+  background: var(--surface) !important;
+}
+
+[data-testid="stNumberInput"] button:hover {
+  background: var(--surface-muted) !important;
+}
+
+/* Streamlit 1.67 select / date markup (no data-baseweb on the field) */
+[data-testid="stSelectbox"] > div > div,
+[data-testid="stMultiSelect"] > div > div,
+[data-testid="stDateInputField"] {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+  border-radius: var(--r-control) !important;
+}
+
+[data-testid="stSelectbox"] > div > div:focus-within,
+[data-testid="stMultiSelect"] > div > div:focus-within,
+[data-testid="stDateInputField"]:focus-within {
+  border-color: var(--accent) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* 29. Tabs — Streamlit 1.67 react-aria markup ([data-testid=stTab])  */
+/* ------------------------------------------------------------------ */
+
+[role="tablist"] {
+  gap: var(--s-1) !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+
+[data-testid="stTab"] {
+  padding: var(--s-2) var(--s-4) !important;
+  border-radius: var(--r-control) var(--r-control) 0 0 !important;
+  color: var(--text-secondary) !important;
+  transition: background 150ms, color 150ms;
+}
+
+[data-testid="stTab"] p {
+  font-size: 0.9rem !important;
+  color: inherit !important;
+}
+
+[data-testid="stTab"]:hover {
+  background: var(--surface-muted) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Active tab: dark text + semibold + olive underline (not colour alone) */
+[data-testid="stTab"][aria-selected="true"] {
+  color: var(--text-primary) !important;
+}
+
+[data-testid="stTab"][aria-selected="true"] p {
+  font-weight: 600 !important;
+}
+
+[data-testid="stTab"] .react-aria-SelectionIndicator {
+  background: var(--accent) !important;
+  height: 2px !important;
+}
+
+[data-testid="stTab"][data-focus-visible],
+[data-testid="stTab"]:focus-visible {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: -2px !important;
+}
+
+@media (max-width: 640px) {
+  [data-testid="stTab"] { padding: var(--s-2) var(--s-3) !important; }
+}
+
+/* Clear Streamlit's fixed top header so the h1 is never overlapped */
+[data-testid="stMainBlockContainer"],
+.block-container {
+  padding-top: 72px !important;
+}
+
+@media (max-width: 640px) {
+  [data-testid="stMainBlockContainer"],
+  .block-container {
+    padding-top: 64px !important;
+  }
 }

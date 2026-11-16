@@ -429,7 +429,7 @@ with tab_dash:
         sc.columns = ["Status", "Count"]
         pipeline_chart = (
             alt.Chart(sc)
-            .mark_bar(color="#2563eb")
+            .mark_bar(color="#4E5947")
             .encode(
                 x=alt.X("Status:N", sort=db.STATUSES,
                          axis=alt.Axis(labelAngle=-30, title="")),
@@ -444,7 +444,7 @@ with tab_dash:
         if weekly.empty:
             right.caption("Add application dates to see this chart.")
         else:
-            right.line_chart(weekly, color="#2563eb")
+            right.line_chart(weekly, color="#4E5947")
 
         # --- Heatmap ---
         st.subheader("Activity — last 26 weeks")
@@ -693,7 +693,7 @@ with tab_apps:
                     .set_index("scanned_at")
                     .rename(columns={"overall_score": "Score"})
                 )
-                st.line_chart(chart_df, color="#2563eb")
+                st.line_chart(chart_df, color="#4E5947")
             # Delete buttons
             for score_row in app_scores.itertuples():
                 date_lbl = str(score_row.scanned_at)[:10]
