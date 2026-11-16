@@ -10,7 +10,9 @@ from tracker.ats import report as _ats_report
 from tracker.ats import ui as ats_ui
 from tracker.tiles import goal_line_html, stat_tile_html
 
-st.set_page_config(page_title="Internship Tracker", layout="wide")
+st.set_page_config(
+    page_title="Internship Tracker", layout="wide", initial_sidebar_state="collapsed",
+)
 styles.setup()
 
 conn = db.connect()
@@ -27,34 +29,18 @@ def _to_date(ts):
 
 
 # ---------------------------------------------------------------------------
-# Sidebar — sample data controls
-# ---------------------------------------------------------------------------
-with st.sidebar:
-    st.header("Sample & data")
-    if st.button("Load sample data"):
-        n = db.load_sample_data(conn)
-        st.info(f"Loaded {n} sample applications.")
-        st.rerun()
-
-    _df_check = db.load_applications(conn)
-    if "is_sample" in _df_check.columns and _df_check["is_sample"].astype(bool).any():
-        n_sample = int(_df_check["is_sample"].astype(bool).sum())
-        if st.button(f"Remove sample data ({n_sample} rows)"):
-            db.clear_sample_data(conn)
-            st.rerun()
-
-    st.divider()
-    _confirm = st.checkbox("I understand this cannot be undone")
-    if st.button("Clear ALL data", disabled=not _confirm):
-        db.clear_all_data(conn)
-        st.rerun()
-
-# ---------------------------------------------------------------------------
 # Main tabs
 # ---------------------------------------------------------------------------
-st.title("Internship Tracker")
-tab_dash, tab_board, tab_apps, tab_add, tab_rem, tab_ats = st.tabs(
-    ["Dashboard", "Board", "Applications", "Add", "Reminders", "Resume Matcher"]
+_now = dt.date.today()
+st.markdown(
+    '<div class="page-head">'
+    '<h1>Internship Tracker</h1>'
+    f'<span class="page-date">{_now:%b} {_now.day}, {_now:%Y}</span>'
+    '</div>',
+    unsafe_allow_html=True,
+)
+tab_dash, tab_board, tab_apps, tab_add, tab_rem, tab_ats, tab_set = st.tabs(
+    ["Dashboard", "Board", "Applications", "Add", "Reminders", "Resume Matcher", "Settings"]
 )
 
 df = db.load_applications(conn)
@@ -392,20 +378,11 @@ with tab_dash:
         goal_stored = int(db.get_setting(conn, "weekly_goal", "10"))
         wp = analytics.weekly_progress(df, goal_stored, today=_today_str)
         gs = analytics.goal_streak(df, goal_stored, today=_today_str)
-        g_line, g_edit = st.columns([6, 1], vertical_alignment="center")
-        g_line.markdown(
-            goal_line_html(wp["count"], goal_stored, gs["current"], gs["longest"]),
+        st.markdown(
+            goal_line_html(wp["count"], goal_stored, gs["current"], gs["longest"])
+            + '<p class="goal-hint">Change the weekly target in Settings.</p>',
             unsafe_allow_html=True,
         )
-        # Temporary home for the target until the Settings tab (Stage 5).
-        with g_edit.popover("Edit goal"):
-            new_goal = st.number_input(
-                "Target applications per week", min_value=1, value=goal_stored, step=1,
-                key="goal_input",
-            )
-            if new_goal != goal_stored:
-                db.set_setting(conn, "weekly_goal", str(new_goal))
-                st.rerun()
 
         # --- Pipeline + weekly chart ---
         left, right = st.columns(2, gap="large")
@@ -792,3 +769,37 @@ with tab_rem:
 # ---------------------------------------------------------------------------
 with tab_ats:
     ats_ui.render(conn)
+
+# ---------------------------------------------------------------------------
+# Settings — weekly target, sample data, clear all
+# ---------------------------------------------------------------------------
+with tab_set:
+    st.subheader("Weekly goal")
+    goal_now = int(db.get_setting(conn, "weekly_goal", "10"))
+    new_goal = st.number_input(
+        "Target applications per week", min_value=1, value=goal_now, step=1,
+        key="goal_input",
+    )
+    if new_goal != goal_now:
+        db.set_setting(conn, "weekly_goal", str(new_goal))
+        st.rerun()
+
+    st.subheader("Sample data")
+    st.caption("Demo applications so a fresh copy has something to show. They are marked [sample].")
+    if st.button("Load sample data"):
+        n = db.load_sample_data(conn)
+        st.info(f"Loaded {n} sample applications.")
+        st.rerun()
+    _df_check = db.load_applications(conn)
+    if "is_sample" in _df_check.columns and _df_check["is_sample"].astype(bool).any():
+        n_sample = int(_df_check["is_sample"].astype(bool).sum())
+        if st.button(f"Remove sample data ({n_sample} rows)"):
+            db.clear_sample_data(conn)
+            st.rerun()
+
+    st.subheader("Clear all data")
+    st.caption("Deletes every application, stage and resume score in your local database.")
+    _confirm = st.checkbox("I understand this cannot be undone")
+    if st.button("Clear ALL data", disabled=not _confirm):
+        db.clear_all_data(conn)
+        st.rerun()

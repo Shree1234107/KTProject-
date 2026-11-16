@@ -72,7 +72,7 @@ CSS = r"""
   --accent-deep:  #2F3829;
 
   /* Radii */
-  --r-control: 7px;           /* buttons, inputs, tags (6–8px)       */
+  --r-control: 6px;           /* buttons, inputs, tags               */
   --r-surface: 10px;          /* tables, cards, forms, expanders     */
 
   /* Spacing scale: 4, 8, 12, 16, 24, 32, 48 */
@@ -1731,6 +1731,117 @@ h3 { border-bottom-color: var(--border) !important; }
 }
 
 #vg-tooltip-element table tr td.key { color: var(--text-secondary) !important; }
+
+/* ------------------------------------------------------------------ */
+/* 33. Page chrome & layout — printed-report finish (Stage 5)          */
+/* ------------------------------------------------------------------ */
+
+/* Hide Streamlit's header bar, toolbar, decoration line and footer */
+[data-testid="stHeader"],
+[data-testid="stToolbar"],
+[data-testid="stDecoration"],
+[data-testid="stSidebarCollapsedControl"],
+footer {
+  display: none !important;
+}
+
+/* Narrower report column; header is gone so less top padding */
+[data-testid="stMainBlockContainer"],
+.block-container {
+  max-width: 1100px !important;
+  padding-top: var(--s-7) !important;
+}
+
+/* Title row: serif title left, small muted date right */
+.page-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--s-4);
+}
+
+.page-head h1 {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.page-head h1 a { display: none !important; }   /* no anchor link icon */
+
+.page-date {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tabs: plain text, thin 1px olive underline on the active tab only */
+[role="tablist"] {
+  gap: var(--s-5) !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+
+[data-testid="stTab"] {
+  padding: var(--s-2) 0 !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+}
+
+[data-testid="stTab"]:hover {
+  background: transparent !important;
+  color: var(--text-primary) !important;
+}
+
+[data-testid="stTab"] .react-aria-SelectionIndicator {
+  height: 1px !important;
+  background: var(--accent) !important;
+}
+
+/* Section labels: 48px above (16px block gap + 32px), none for the first */
+[data-testid="stHeading"]:has(h3) {
+  margin-top: var(--s-6);
+}
+
+[role="tabpanel"] > div > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:first-child [data-testid="stHeading"],
+[data-testid="stColumn"] [data-testid="stHeading"]:has(h3) {
+  margin-top: 0;
+}
+
+/* Rows of columns (e.g. Pipeline | Applications per week) also get 48px */
+[data-testid="stHorizontalBlock"]:has([data-testid="stVegaLiteChart"]) {
+  margin-top: var(--s-6);
+}
+
+/* Settings: keep the goal box compact */
+[data-testid="stNumberInput"] { max-width: 260px; }
+
+/* Goal line hint */
+.goal-hint,
+[data-testid="stMarkdownContainer"] p.goal-hint {
+  margin: var(--s-2) 0 0 !important;
+  font-size: 0.78rem !important;
+  color: var(--text-secondary) !important;
+}
+
+/* Inputs and buttons: 1px rule border */
+button[data-testid^="stBaseButton"],
+[data-testid="stTextInput"] input,
+[data-testid="stTextArea"] textarea,
+[data-testid="stNumberInput"] [data-baseweb="input"],
+[data-testid="stSelectbox"] > div > div,
+[data-testid="stMultiSelect"] > div > div,
+[data-testid="stDateInputField"] {
+  border-width: 1px !important;
+}
+
+@media (max-width: 640px) {
+  [data-testid="stMainBlockContainer"],
+  .block-container {
+    padding-top: var(--s-6) !important;
+  }
+  [role="tablist"] { gap: var(--s-4) !important; }
+  .page-head { flex-direction: column; gap: var(--s-1); }
+}
 """
 
 
