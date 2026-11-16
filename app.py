@@ -6,13 +6,13 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from tracker import analytics, db, ics as _ics, theme
+from tracker import analytics, db, ics as _ics, styles
 from tracker.ats import report as _ats_report
 from tracker.ats import ui as ats_ui
 from tracker.tiles import stat_tile_html
 
 st.set_page_config(page_title="Internship Tracker", layout="wide")
-theme.inject()
+styles.setup()
 
 conn = db.connect()
 

@@ -1,5 +1,36 @@
+"""Shared visual setup for the Internship Tracker.
+
+Everything about how the app looks lives here:
+- TOKENS: the palette, used by both the CSS and (later) the Altair theme.
+- CSS: the stylesheet injected into every page.
+- setup(): call once in app.py, right after st.set_page_config.
+
+To change a color, edit TOKENS and the matching variable in CSS section 0.
+"""
+from __future__ import annotations
+
+import streamlit as st
+
+# Palette — keep in sync with CSS section 0 (":root").
+TOKENS = {
+    "page_bg": "#F6F3ED",
+    "surface": "#FCFBF8",
+    "surface_muted": "#EEEAE2",
+    "text": "#292923",
+    "muted": "#66655D",
+    "rule": "#E3DED5",
+    "olive": "#4E5947",
+    "olive_hover": "#3D4737",
+    "olive_mid": "#8A957F",
+    "olive_light": "#C9D0BC",
+    "negative": "#8A5A44",
+    "serif": 'Georgia, "Times New Roman", serif',
+    "sans": 'system-ui, -apple-system, "Segoe UI", sans-serif',
+}
+
+CSS = r"""
 /* ================================================================
- * tracker/style.css — KTProject Internship Tracker visual theme
+ * KTProject Internship Tracker visual theme
  * Warm editorial minimalist: ivory page, near-white surfaces,
  * dark olive accent. Flat — borders over shadows, no gradients.
  * Tested against Streamlit 1.67.0
@@ -31,6 +62,10 @@
   --accent-hover: #3D4737;
   --accent-soft:  #E7EBDD;
   --accent-faint: #F1F3EA;
+  --olive-mid:    #8A957F;
+  --olive-light:  #C9D0BC;
+  --negative:     #8A5A44;   /* muted brown, ~5.5:1 on --surface */
+  --serif: Georgia, "Times New Roman", serif;
   --accent-line:  #CDD4C0;
   --accent-mid:   #6B7761;    /* ≥4.5:1 on --surface, used as text   */
   --accent-deep:  #2F3829;
@@ -1520,3 +1555,9 @@ h3 { border-bottom-color: var(--border) !important; }
     padding-top: 64px !important;
   }
 }
+"""
+
+
+def setup() -> None:
+    """Inject the shared stylesheet. Call once per run after set_page_config."""
+    st.markdown(f"<style>{CSS}</style>", unsafe_allow_html=True)

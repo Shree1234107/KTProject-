@@ -27,9 +27,9 @@ Data is stored locally in `data/tracker.db` (git-ignored, never commit it). To p
 | `--c-text` | `#0f1f3d` | Body text (WCAG AA contrast on white) |
 | `--c-text-sec` | `#475a7a` | Secondary labels, captions |
 
-**Where the CSS lives:** `tracker/style.css`. The file is loaded once by `tracker/theme.py::inject()`, which `app.py` calls at startup after `st.set_page_config`. The Resume Matcher tab (`tracker/ats/ui.py`) contains no inline `<style>` blocks or inline color values.
+**Where the CSS lives:** `tracker/styles.py` (the `CSS` string, plus a `TOKENS` palette dict shared with the charts). `styles.setup()` injects it once at startup, right after `st.set_page_config` in `app.py`. The Resume Matcher tab (`tracker/ats/ui.py`) contains no inline `<style>` blocks or inline color values.
 
-**To change a color:** update the matching CSS variable in `tracker/style.css` section 0. All occurrences in the UI update automatically — no hunting through Python files.
+**To change a color:** update `TOKENS` and the matching CSS variable in section 0 of `tracker/styles.py`. All occurrences in the UI update automatically — no hunting through Python files.
 
 **Design rules:** square corners everywhere (`border-radius: 0`), 1 px solid borders in `--c-border`, flat (no shadows, no gradients), system-ui font stack (no network font load). Section headings are small uppercase labels. Metrics use tabular numbers. All alerts use a 3 px blue left border regardless of severity; errors show an "Error:" prefix in the message text.
 

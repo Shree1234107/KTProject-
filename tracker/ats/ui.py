@@ -2,7 +2,7 @@
 
 Call :func:`render` from app.py inside the ``with tab_ats:`` block.
 This module handles all display logic; it never does text processing itself.
-All colors and layout are defined in tracker/style.css.
+All colors and layout are defined in tracker/styles.py.
 """
 from __future__ import annotations
 
