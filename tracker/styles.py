@@ -9,6 +9,7 @@ To change a color, edit TOKENS and the matching variable in CSS section 0.
 """
 from __future__ import annotations
 
+import altair as alt
 import streamlit as st
 
 # Palette — keep in sync with CSS section 0 (":root").
@@ -1703,9 +1704,89 @@ h3 { border-bottom-color: var(--border) !important; }
   .goal-dots { gap: 5px; }
   .goal-dot  { width: 9px; height: 9px; }
 }
+
+/* ------------------------------------------------------------------ */
+/* 32. Charts — no toolbar, no chrome                                  */
+/* ------------------------------------------------------------------ */
+
+/* Hide the hover toolbar (fullscreen etc.) on charts only —
+   dataframes keep their search / download toolbar. */
+[data-testid="stElementContainer"]:has([data-testid="stVegaLiteChart"]) [data-testid="stElementToolbar"],
+[data-testid="stVegaLiteChart"] details,
+.vega-embed .vega-actions,
+.vega-embed summary {
+  display: none !important;
+}
+
+/* Clean tooltip in the report palette */
+#vg-tooltip-element {
+  background: var(--surface) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--r-control) !important;
+  box-shadow: none !important;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif !important;
+  font-size: 12px !important;
+  padding: 6px 10px !important;
+}
+
+#vg-tooltip-element table tr td.key { color: var(--text-secondary) !important; }
 """
 
 
+ALTAIR_THEME = "ledger"
+
+
+def _altair_theme() -> dict:
+    """Printed-report chart style: no boxes, faint horizontal rules only."""
+    t = TOKENS
+    axis_common = {
+        "domain": False,
+        "ticks": False,
+        "labelColor": t["muted"],
+        "labelFont": t["sans"],
+        "labelFontSize": 11,
+        "labelPadding": 6,
+        "titleColor": t["muted"],
+        "titleFont": t["sans"],
+        "titleFontSize": 11,
+        "titleFontWeight": "normal",
+    }
+    return {
+        "config": {
+            "background": None,
+            "padding": {"left": 0, "right": 8, "top": 8, "bottom": 0},
+            "view": {"stroke": None},
+            "font": t["sans"],
+            "axis": {**axis_common, "grid": False},
+            "axisY": {**axis_common, "grid": True, "gridColor": t["rule"],
+                      "gridWidth": 1, "tickCount": 4},
+            "axisX": {**axis_common, "grid": False, "labelAngle": 0},
+            "bar": {"color": t["olive"]},
+            "line": {"color": t["olive"], "strokeWidth": 1.5},
+            "point": {"color": t["olive"], "filled": True, "size": 30},
+            "rule": {"color": t["olive_mid"]},
+            "text": {"color": t["muted"], "font": t["sans"], "fontSize": 11},
+            "legend": {"disable": True},
+        }
+    }
+
+
+def _register_altair_theme() -> None:
+    """Register and enable the theme (Altair 5.5+ API, with a fallback)."""
+    if hasattr(alt, "theme") and hasattr(alt.theme, "register"):
+        alt.theme.register(ALTAIR_THEME, enable=True)(_altair_theme)
+    else:  # older Altair
+        alt.themes.register(ALTAIR_THEME, _altair_theme)
+        alt.themes.enable(ALTAIR_THEME)
+
+
 def setup() -> None:
-    """Inject the shared stylesheet. Call once per run after set_page_config."""
+    """Inject the shared stylesheet and enable the chart theme.
+
+    Call once per run after st.set_page_config. Render charts with
+    ``st.altair_chart(chart, theme=None)`` so Streamlit's own chart theme
+    doesn't override this one.
+    """
+    _register_altair_theme()
     st.markdown(f"<style>{CSS}</style>", unsafe_allow_html=True)

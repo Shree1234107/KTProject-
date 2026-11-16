@@ -2,11 +2,10 @@
 import datetime as dt
 import html as _html
 
-import altair as alt
 import pandas as pd
 import streamlit as st
 
-from tracker import analytics, db, ics as _ics, styles
+from tracker import analytics, charts, db, ics as _ics, styles
 from tracker.ats import report as _ats_report
 from tracker.ats import ui as ats_ui
 from tracker.tiles import goal_line_html, stat_tile_html
@@ -409,28 +408,17 @@ with tab_dash:
                 st.rerun()
 
         # --- Pipeline + weekly chart ---
-        left, right = st.columns(2)
+        left, right = st.columns(2, gap="large")
         left.subheader("Pipeline")
-        sc = analytics.status_counts(df).reset_index()
-        sc.columns = ["Status", "Count"]
-        pipeline_chart = (
-            alt.Chart(sc)
-            .mark_bar(color="#4E5947")
-            .encode(
-                x=alt.X("Status:N", sort=db.STATUSES,
-                         axis=alt.Axis(labelAngle=-30, title="")),
-                y=alt.Y("Count:Q", title=""),
-                tooltip=["Status:N", "Count:Q"],
-            )
-            .properties(height=200)
+        left.altair_chart(
+            charts.pipeline_chart(analytics.status_counts(df)),
+            use_container_width=True, theme=None,
         )
-        left.altair_chart(pipeline_chart, use_container_width=True)
         right.subheader("Applications per week")
-        weekly = analytics.applications_per_week(df)
-        if weekly.empty:
-            right.caption("Add application dates to see this chart.")
-        else:
-            right.line_chart(weekly, color="#4E5947")
+        right.altair_chart(
+            charts.weekly_chart(analytics.weekly_counts(df, today=_today_str), goal_stored),
+            use_container_width=True, theme=None,
+        )
 
         # --- Heatmap ---
         st.subheader("Activity — last 26 weeks")
@@ -449,6 +437,10 @@ with tab_dash:
 
         # --- By source, referral comparison, deadlines ---
         st.subheader("Where are responses coming from?")
+        rbs = analytics.response_by_source(df, stages_df)
+        if not rbs.empty:
+            st.caption("Response rate by source — share of submitted applications that heard back.")
+            st.altair_chart(charts.response_rate_chart(rbs), use_container_width=True, theme=None)
         src = analytics.by_source(df)
         if src.empty:
             st.caption("Add a source to applications to see this.")
@@ -673,13 +665,10 @@ with tab_apps:
             st.subheader("Resume match history")
             st.markdown(_match_history_html(app_scores), unsafe_allow_html=True)
             if len(app_scores) >= 2:
-                chart_df = (
-                    app_scores[["scanned_at", "overall_score"]]
-                    .sort_values("scanned_at")
-                    .set_index("scanned_at")
-                    .rename(columns={"overall_score": "Score"})
+                st.altair_chart(
+                    charts.score_history_chart(app_scores),
+                    use_container_width=True, theme=None,
                 )
-                st.line_chart(chart_df, color="#4E5947")
             # Delete buttons
             for score_row in app_scores.itertuples():
                 date_lbl = str(score_row.scanned_at)[:10]

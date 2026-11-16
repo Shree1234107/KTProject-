@@ -758,3 +758,39 @@ def test_latest_match_scores_multiple_apps():
 def test_latest_match_scores_empty():
     result = analytics.latest_match_scores(pd.DataFrame())
     assert result.empty
+
+
+def test_weekly_counts_includes_empty_weeks():
+    df = pd.DataFrame({
+        "id": [1, 2, 3, 4],
+        "status": ["Applied", "Applied", "Wishlist", "Offer"],
+        "date_applied": pd.to_datetime(["2026-11-10", "2026-11-12", "2026-11-11", "2026-10-20"]),
+        "source": ["a", "b", "c", "d"],
+    })
+    wc = analytics.weekly_counts(df, today="2026-11-16", weeks=12)
+    assert len(wc) == 12
+    assert wc["week_start"].iloc[-1] == pd.Timestamp("2026-11-16")   # this Monday
+    assert wc["week_start"].iloc[-2] == pd.Timestamp("2026-11-09")
+    assert wc["count"].iloc[-2] == 2           # Wishlist not counted
+    assert wc["count"].iloc[-1] == 0
+    assert wc.loc[wc.week_start == pd.Timestamp("2026-10-19"), "count"].item() == 1
+    assert wc["count"].sum() == 3
+
+
+def test_response_by_source_ranks_by_rate():
+    df = pd.DataFrame({
+        "id": [1, 2, 3, 4, 5],
+        "status": ["Interview", "Applied", "Rejected", "Applied", "Wishlist"],
+        "date_applied": pd.to_datetime(["2026-11-01"] * 5),
+        "source": ["Referral", "LinkedIn", "LinkedIn", "Website", "Referral"],
+    })
+    r = analytics.response_by_source(df)
+    assert list(r["source"]) == ["Referral", "LinkedIn", "Website"]
+    assert r.loc[0, "rate"] == 1.0 and r.loc[0, "submitted"] == 1   # Wishlist excluded
+    assert r.loc[1, "responded"] == 1 and r.loc[1, "submitted"] == 2
+    assert r.loc[2, "rate"] == 0.0
+
+
+def test_response_by_source_empty():
+    df = pd.DataFrame({"id": [1], "status": ["Applied"], "date_applied": [pd.NaT], "source": [""]})
+    assert analytics.response_by_source(df).empty

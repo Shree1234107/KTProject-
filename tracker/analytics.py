@@ -65,6 +65,43 @@ def applications_per_week(df):
     return d.set_index("date_applied").resample("W").size()
 
 
+def weekly_counts(df: pd.DataFrame, today=None, weeks: int = 12) -> pd.DataFrame:
+    """Submitted applications per Mon–Sun week for the last *weeks* weeks.
+
+    Empty weeks are included as 0 so the chart has no gaps. Uses the same
+    rule as the weekly goal (non-Wishlist rows with a date_applied).
+    Returns columns ``week_start`` (Timestamp, Monday) and ``count`` (int).
+    """
+    today_ts = pd.Timestamp(today or pd.Timestamp.today().normalize())
+    this_mon = today_ts - pd.Timedelta(days=today_ts.day_of_week)
+    starts = [this_mon - pd.Timedelta(weeks=i) for i in range(weeks - 1, -1, -1)]
+
+    d = df[df["status"].isin(SUBMITTED)].dropna(subset=["date_applied"])
+    mondays = d["date_applied"] - pd.to_timedelta(d["date_applied"].dt.day_of_week, unit="D")
+    per_week = mondays.dt.normalize().value_counts()
+    counts = [int(per_week.get(w, 0)) for w in starts]
+    return pd.DataFrame({"week_start": starts, "count": counts})
+
+
+def response_by_source(df: pd.DataFrame, stages_df=None) -> pd.DataFrame:
+    """Response rate per source among submitted applications, highest first.
+
+    Uses the same "responded" rule as the KPI row. Returns columns
+    ``source``, ``submitted``, ``responded``, ``rate`` (0–1 float).
+    """
+    cols = ["source", "submitted", "responded", "rate"]
+    sub = df[df["status"].isin(SUBMITTED)]
+    sub = sub[sub["source"].fillna("").str.strip() != ""]
+    if sub.empty:
+        return pd.DataFrame(columns=cols)
+    sub = sub.assign(_resp=_responded_mask(sub, _stage_app_ids(stages_df)))
+    g = sub.groupby("source").agg(submitted=("id", "count"), responded=("_resp", "sum"))
+    g["responded"] = g["responded"].astype(int)
+    g["rate"] = g["responded"] / g["submitted"]
+    g = g.reset_index().sort_values(["rate", "submitted"], ascending=[False, False])
+    return g[cols].reset_index(drop=True)
+
+
 def by_source(df):
     d = df[df["source"].str.strip() != ""]
     if d.empty:
