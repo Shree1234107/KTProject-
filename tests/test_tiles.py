@@ -88,18 +88,25 @@ def test_stat_tile_has_tile_n_class():
 
 def test_stat_tile_no_trend_when_none():
     html = stat_tile_html(1, "Total", "5", None, None, False)
-    assert "not enough data for a trend" in html
+    assert "stat-tile-trend" not in html
+    assert "not enough data" not in html
 
 
 def test_stat_tile_trend_up_rate():
     html = stat_tile_html(2, "Rate", "30%", 0.30, 0.20, True)
-    assert "up" in html
-    assert "10.0 points" in html
+    assert "↑" in html and "up" in html
+    assert "10 pts vs prior 30 days" in html
 
 
 def test_stat_tile_trend_down_count():
     html = stat_tile_html(4, "Offers", "2", 2, 5, False)
-    assert "down 3" in html
+    assert "↓" in html and "down" in html
+    assert "3 vs prior 30 days" in html
+
+
+def test_stat_tile_trend_flat():
+    html = stat_tile_html(4, "Offers", "2", 2, 2, False)
+    assert "no change vs prior 30 days" in html
 
 
 def test_stat_tile_zero_value():

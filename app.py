@@ -388,15 +388,15 @@ with tab_dash:
             return c_prev[key] if pc["has_trend"] and c_prev else None
 
         tiles = "".join([
-            stat_tile_html(1, "Total",          str(s["total"]),
+            stat_tile_html(1, "applications",   str(s["total"]),
                            _t("total"),          _p("total"),          False),
-            stat_tile_html(2, "Response rate",  f"{s['response_rate']:.0%}",
+            stat_tile_html(2, "response rate",  f"{s['response_rate']:.0%}",
                            _t("response_rate"),  _p("response_rate"),  True),
-            stat_tile_html(3, "Interview rate", f"{s['interview_rate']:.0%}",
+            stat_tile_html(3, "interview rate", f"{s['interview_rate']:.0%}",
                            _t("interview_rate"), _p("interview_rate"), True),
-            stat_tile_html(4, "Offers",          str(s["offers"]),
+            stat_tile_html(4, "offers",          str(s["offers"]),
                            _t("offers"),          _p("offers"),        False),
-            stat_tile_html(5, "Active",          str(s["active"]), None, None, False),
+            stat_tile_html(5, "active",          str(s["active"]), None, None, False),
         ])
         st.markdown(f'<div class="stat-row">{tiles}</div>', unsafe_allow_html=True)
 

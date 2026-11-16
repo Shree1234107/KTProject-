@@ -1555,6 +1555,78 @@ h3 { border-bottom-color: var(--border) !important; }
     padding-top: 64px !important;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* 30. KPI row — printed-report style: no boxes, ruled, serif numbers */
+/* ------------------------------------------------------------------ */
+
+.stat-row {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0 !important;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin: var(--s-2) 0 var(--s-7) !important;
+}
+
+.stat-row .stat-tile {
+  border: none !important;
+  border-left: 1px solid var(--border) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  padding: var(--s-5) var(--s-5) var(--s-5) !important;
+}
+
+.stat-row .stat-tile:first-child {
+  border-left: none !important;
+  padding-left: 0 !important;
+}
+
+.stat-row .stat-tile-value {
+  font-family: var(--serif);
+  font-size: 40px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  margin: 0 0 var(--s-2);
+}
+
+.stat-row .stat-tile-label {
+  font-size: 0.85rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: lowercase;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.stat-row .stat-tile-trend {
+  font-size: 0.78rem;
+  font-weight: 400;
+  margin-top: var(--s-2);
+  color: var(--text-secondary);
+}
+
+.stat-row .trend-up   { color: var(--accent); }
+.stat-row .trend-down { color: var(--negative); }
+.stat-row .trend-flat { color: var(--text-secondary); }
+
+@media (max-width: 900px) {
+  .stat-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .stat-row .stat-tile:nth-child(3n+1) { border-left: none !important; padding-left: 0 !important; }
+  .stat-row .stat-tile:nth-child(n+4)  { border-top: 1px solid var(--border) !important; }
+}
+
+@media (max-width: 640px) {
+  .stat-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat-row .stat-tile { padding: var(--s-4) var(--s-4) !important; }
+  .stat-row .stat-tile:nth-child(3n+1) { border-left: 1px solid var(--border) !important; padding-left: var(--s-4) !important; }
+  .stat-row .stat-tile:nth-child(odd)  { border-left: none !important; padding-left: 0 !important; }
+  .stat-row .stat-tile:nth-child(n+3)  { border-top: 1px solid var(--border) !important; }
+  .stat-row .stat-tile:nth-child(4)    { border-top: 1px solid var(--border) !important; }
+  .stat-row .stat-tile-value { font-size: 32px; }
+}
 """
 
 

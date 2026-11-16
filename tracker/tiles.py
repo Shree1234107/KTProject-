@@ -1,4 +1,4 @@
-"""HTML helpers for Dashboard stat tiles with CSS count-up animation."""
+"""HTML helpers for the Dashboard KPI row (ruled, boxless) with CSS count-up."""
 from __future__ import annotations
 
 import html as _html
@@ -25,30 +25,30 @@ def count_anim_html(integer_val: int, suffix: str = "") -> str:
 
 
 def _trend_html(cur, prev, is_rate: bool) -> str:
+    """One short trend line, e.g. "↓ 14 pts vs prior 30 days".
+
+    Returns "" when there is not enough data — the KPI row shows nothing
+    rather than a placeholder. Direction is spelled out for screen readers
+    (the arrow is aria-hidden), so it never relies on colour alone.
+    """
     if cur is None or prev is None:
-        return '<span class="trend-none">not enough data for a trend</span>'
+        return ""
     diff = cur - prev
     if is_rate:
-        cur_str = f"{cur:.0%}"
-        mag = abs(diff * 100)
-        if mag < 0.5:
-            change_str, cls = "no change", "trend-flat"
-        elif diff > 0:
-            change_str, cls = f"up {mag:.1f} points", "trend-up"
-        else:
-            change_str, cls = f"down {mag:.1f} points", "trend-down"
+        mag = int(round(abs(diff * 100)))
+        amount = f"{mag} pts"
     else:
-        cur_str = str(int(round(cur)))
         mag = abs(int(round(diff)))
-        if mag == 0:
-            change_str, cls = "no change", "trend-flat"
-        elif diff > 0:
-            change_str, cls = f"up {mag}", "trend-up"
-        else:
-            change_str, cls = f"down {mag}", "trend-down"
+        amount = str(mag)
+    if mag == 0:
+        return '<span class="trend-flat">no change vs prior 30 days</span>'
+    if diff > 0:
+        arrow, word, cls = "↑", "up", "trend-up"
+    else:
+        arrow, word, cls = "↓", "down", "trend-down"
     return (
-        f'<span class="{cls}">last 30 days: {cur_str} '
-        f'({change_str} from the 30 days before)</span>'
+        f'<span class="{cls}"><span aria-hidden="true">{arrow}</span>'
+        f'<span class="sr-only">{word}</span> {amount} vs prior 30 days</span>'
     )
 
 
@@ -64,7 +64,7 @@ def stat_tile_html(
 
     Args:
         n: Tile index 1–5 (selects the stagger CSS class stat-tile-N).
-        label: Tile label displayed above the number.
+        label: Short lowercase label displayed below the number.
         value: Pre-formatted value string such as "15" or "29%".
         cur: Current 30-day window metric (float | int | None).
         prev: Previous 30-day window metric (float | int | None).
@@ -84,10 +84,11 @@ def stat_tile_html(
     value_html = count_anim_html(int_val, suffix)
     trend = _trend_html(cur, prev, is_rate)
     label_e = _html.escape(label)
+    trend_div = f'<div class="stat-tile-trend">{trend}</div>' if trend else ""
     return (
         f'<div class="stat-tile stat-tile-{n}">'
-        f'<div class="stat-tile-label">{label_e}</div>'
         f'<div class="stat-tile-value">{value_html}</div>'
-        f'<div class="stat-tile-trend">{trend}</div>'
+        f'<div class="stat-tile-label">{label_e}</div>'
+        f'{trend_div}'
         f'</div>'
     )
