@@ -92,3 +92,36 @@ def stat_tile_html(
         f'{trend_div}'
         f'</div>'
     )
+
+
+MAX_GOAL_DOTS = 20
+
+
+def goal_line_html(count: int, goal: int, streak: int, longest: int) -> str:
+    """One compact weekly-goal line: dots, "3 of 10", and the streak.
+
+    One dot per application up to the goal. Goals above MAX_GOAL_DOTS are
+    drawn as MAX_GOAL_DOTS dots filled in proportion, so the line never
+    wraps. The dots are decorative (aria-hidden); the text carries the
+    numbers for screen readers.
+    """
+    goal = max(int(goal), 1)
+    count = max(int(count), 0)
+    n_dots = min(goal, MAX_GOAL_DOTS)
+    filled = min(round(count / goal * n_dots), n_dots)
+    dots = "".join(
+        f'<span class="goal-dot{" goal-dot--on" if i < filled else ""}"></span>'
+        for i in range(n_dots)
+    )
+    weeks = "week" if streak == 1 else "weeks"
+    best = (
+        f' <span class="goal-best">· best {longest}</span>' if longest > streak else ""
+    )
+    return (
+        '<div class="goal-line">'
+        '<span class="goal-title">This week</span>'
+        f'<span class="goal-dots" aria-hidden="true">{dots}</span>'
+        f'<span class="goal-count">{count} of {goal}</span>'
+        f'<span class="goal-streak-text">Streak: {streak} {weeks}{best}</span>'
+        '</div>'
+    )

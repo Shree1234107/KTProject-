@@ -1627,6 +1627,82 @@ h3 { border-bottom-color: var(--border) !important; }
   .stat-row .stat-tile:nth-child(4)    { border-top: 1px solid var(--border) !important; }
   .stat-row .stat-tile-value { font-size: 32px; }
 }
+
+/* ------------------------------------------------------------------ */
+/* 31. Weekly goal — one compact line with dots                       */
+/* ------------------------------------------------------------------ */
+
+.goal-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-5);
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.goal-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.goal-dots {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.goal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--olive-mid);
+  background: transparent;
+}
+
+.goal-dot--on {
+  background: var(--accent);
+  border-color: var(--accent);
+  animation: fade-up 200ms ease-out both;
+}
+
+.goal-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.goal-streak-text,
+.goal-best {
+  color: var(--text-secondary);
+}
+
+/* Space below the whole goal row (line + Edit goal button) */
+[data-testid="stHorizontalBlock"]:has(.goal-line) {
+  margin-bottom: var(--s-6);
+}
+
+/* "Edit goal" popover trigger: quiet text-style button */
+[data-testid="stPopover"] button {
+  background: transparent !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-secondary) !important;
+  font-size: 0.8rem !important;
+  min-height: 0 !important;
+  padding: 4px 10px !important;
+}
+
+[data-testid="stPopover"] button:hover {
+  background: var(--surface-muted) !important;
+  color: var(--text-primary) !important;
+}
+
+@media (max-width: 640px) {
+  .goal-line { gap: var(--s-2) var(--s-4); }
+  .goal-dots { gap: 5px; }
+  .goal-dot  { width: 9px; height: 9px; }
+}
 """
 
 

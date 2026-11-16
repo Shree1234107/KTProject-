@@ -9,7 +9,7 @@ import streamlit as st
 from tracker import analytics, db, ics as _ics, styles
 from tracker.ats import report as _ats_report
 from tracker.ats import ui as ats_ui
-from tracker.tiles import stat_tile_html
+from tracker.tiles import goal_line_html, stat_tile_html
 
 st.set_page_config(page_title="Internship Tracker", layout="wide")
 styles.setup()
@@ -182,17 +182,6 @@ def _funnel_html(f: dict) -> str:
         p.append('</div>')
     p.append('</div>')
     return "".join(p)
-
-
-def _goal_progress_html(wp: dict) -> str:
-    """Build the weekly goal progress bar HTML."""
-    pct = min(wp["count"] / wp["goal"] * 100, 100.0) if wp["goal"] > 0 else 0.0
-    return (
-        '<div class="goal-wrap">'
-        f'<div class="goal-track"><div class="goal-fill" style="width:{pct:.1f}%"></div></div>'
-        f'<div class="goal-label">{wp["count"]} of {wp["goal"]} this week</div>'
-        '</div>'
-    )
 
 
 def _html_table(
@@ -400,27 +389,24 @@ with tab_dash:
         ])
         st.markdown(f'<div class="stat-row">{tiles}</div>', unsafe_allow_html=True)
 
-        # --- Weekly goal ---
-        with st.expander("Weekly goal", expanded=True):
-            goal_stored = int(db.get_setting(conn, "weekly_goal", "10"))
+        # --- Weekly goal: one compact line ---
+        goal_stored = int(db.get_setting(conn, "weekly_goal", "10"))
+        wp = analytics.weekly_progress(df, goal_stored, today=_today_str)
+        gs = analytics.goal_streak(df, goal_stored, today=_today_str)
+        g_line, g_edit = st.columns([6, 1], vertical_alignment="center")
+        g_line.markdown(
+            goal_line_html(wp["count"], goal_stored, gs["current"], gs["longest"]),
+            unsafe_allow_html=True,
+        )
+        # Temporary home for the target until the Settings tab (Stage 5).
+        with g_edit.popover("Edit goal"):
             new_goal = st.number_input(
                 "Target applications per week", min_value=1, value=goal_stored, step=1,
                 key="goal_input",
             )
             if new_goal != goal_stored:
                 db.set_setting(conn, "weekly_goal", str(new_goal))
-
-            wp = analytics.weekly_progress(df, int(new_goal), today=_today_str)
-            gs = analytics.goal_streak(df, int(new_goal), today=_today_str)
-            st.markdown(_goal_progress_html(wp), unsafe_allow_html=True)
-            st.markdown(
-                f'<div class="goal-streak">'
-                f'Current streak: <span class="goal-streak-num">{gs["current"]}</span> '
-                f'week{"s" if gs["current"] != 1 else ""} &nbsp;·&nbsp; '
-                f'Longest: <span class="goal-streak-num">{gs["longest"]}</span>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
+                st.rerun()
 
         # --- Pipeline + weekly chart ---
         left, right = st.columns(2)

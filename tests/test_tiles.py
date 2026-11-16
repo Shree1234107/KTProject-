@@ -117,3 +117,37 @@ def test_stat_tile_zero_value():
 def test_stat_tile_large_value():
     html = stat_tile_html(1, "Total", "1500", None, None, False)
     assert "--target:1500" in html
+
+
+# ---------------------------------------------------------------------------
+# goal_line_html
+# ---------------------------------------------------------------------------
+import re
+
+from tracker.tiles import goal_line_html
+
+
+def test_goal_line_dots_match_goal_and_count():
+    html = goal_line_html(3, 10, 0, 0)
+    assert len(re.findall(r'class="goal-dot(?: goal-dot--on)?"', html)) == 10
+    assert html.count("goal-dot--on") == 3
+    assert "3 of 10" in html
+    assert "Streak: 0 weeks" in html
+
+
+def test_goal_line_over_goal_fills_all():
+    html = goal_line_html(14, 10, 1, 1)
+    assert html.count("goal-dot--on") == 10
+    assert "14 of 10" in html
+    assert "Streak: 1 week<" in html
+
+
+def test_goal_line_large_goal_capped():
+    html = goal_line_html(25, 50, 0, 0)
+    assert len(re.findall(r'class="goal-dot(?: goal-dot--on)?"', html)) == 20
+    assert html.count("goal-dot--on") == 10
+
+
+def test_goal_line_shows_best_only_when_higher():
+    assert "best 4" in goal_line_html(1, 5, 2, 4)
+    assert "best" not in goal_line_html(1, 5, 2, 2)
