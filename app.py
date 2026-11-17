@@ -372,7 +372,8 @@ def _render_board_cards(group: pd.DataFrame, status_name: str) -> None:
                 _move_to(app_id, nxt, row.date_applied)
                 st.rerun()
 
-        with st.popover("Change stage", width="stretch"):
+        with st.popover("Change stage", width="stretch",
+                        key=f"move_{app_id}_{row.status}"):
             picked = st.radio(
                 f"Stage for {row.company}",
                 db.STATUSES,
