@@ -441,12 +441,12 @@ with tab_dash:
         left.subheader("Pipeline")
         left.altair_chart(
             charts.pipeline_chart(analytics.status_counts(df)),
-            use_container_width=True, theme=None,
+            width="stretch", theme=None,
         )
         right.subheader("Applications per week")
         right.altair_chart(
             charts.weekly_chart(analytics.weekly_counts(df, today=_today_str), goal_stored),
-            use_container_width=True, theme=None,
+            width="stretch", theme=None,
         )
 
         # --- Heatmap ---
@@ -469,7 +469,7 @@ with tab_dash:
         rbs = analytics.response_by_source(df, stages_df)
         if not rbs.empty:
             st.caption("Response rate by source — share of submitted applications that heard back.")
-            st.altair_chart(charts.response_rate_chart(rbs), use_container_width=True, theme=None)
+            st.altair_chart(charts.response_rate_chart(rbs), width="stretch", theme=None)
         src = analytics.by_source(df)
         if src.empty:
             st.caption("Add a source to applications to see this.")
@@ -516,7 +516,7 @@ with tab_dash:
         if dl.empty:
             st.caption("Nothing due soon.")
         else:
-            st.dataframe(dl, use_container_width=True, hide_index=True)
+            st.dataframe(dl, width="stretch", hide_index=True)
 
 # ---------------------------------------------------------------------------
 # Board (Kanban)
@@ -557,7 +557,7 @@ with tab_board:
             with st.expander(f"Withdrawn ({len(withdrawn)})"):
                 st.dataframe(
                     withdrawn[["company", "role", "location", "date_applied"]],
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                 )
 
@@ -577,7 +577,7 @@ with tab_apps:
         if q:
             m = view["company"].str.contains(q, case=False) | view["role"].str.contains(q, case=False)
             view = view[m]
-        st.dataframe(view, use_container_width=True, hide_index=True)
+        st.dataframe(view, width="stretch", hide_index=True)
 
         st.download_button(
             "Download CSV",
@@ -696,7 +696,7 @@ with tab_apps:
             if len(app_scores) >= 2:
                 st.altair_chart(
                     charts.score_history_chart(app_scores),
-                    use_container_width=True, theme=None,
+                    width="stretch", theme=None,
                 )
             # Delete buttons
             for score_row in app_scores.itertuples():
@@ -779,7 +779,7 @@ with tab_rem:
             st.dataframe(
                 stale[["company", "role", "days_waiting"]].rename(
                     columns={"days_waiting": "Days waiting"}),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
 

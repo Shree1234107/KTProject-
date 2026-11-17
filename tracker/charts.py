@@ -2,7 +2,7 @@
 
 Colours come from tracker.styles.TOKENS; axis/grid styling comes from the
 registered Altair theme (see styles._altair_theme). Render each chart with
-``st.altair_chart(chart, use_container_width=True, theme=None)``.
+``st.altair_chart(chart, width="stretch", theme=None)``.
 """
 from __future__ import annotations
 
