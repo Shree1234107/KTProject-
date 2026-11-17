@@ -55,6 +55,7 @@ if not _latest_scores.empty:
         _latest_scores["overall_score"],
     ))
 
+_stale_days = int(db.get_setting(conn, "stale_days", "21"))
 _today     = dt.date.today()
 _today_str = str(_today)
 
@@ -336,14 +337,21 @@ def _board_card_html(row, today_d: dt.date, match_score: float | None = None,
         )
 
     timeline = timeline or [(row.status, None)]
+    days = analytics.days_in_stage(timeline, today_d)
+    stale = analytics.is_stale(row.status, days, _stale_days)
+    stale_tag = (
+        f'<div class="board-stale-tag">Quiet {days} days · follow up?</div>'
+        if stale else ""
+    )
     return (
-        '<div class="board-card">'
+        f'<div class="board-card{" board-card--stale" if stale else ""}">'
         f'<div class="board-card-company">{_html.escape(row.company)}</div>'
         f'<div class="board-card-role">{_html.escape(row.role)}</div>'
         + (f'<div class="board-card-meta">{_html.escape(meta)}</div>'  if meta  else "")
         + _stepper_html(timeline, row.status, today_d)
         + (f'<div class="board-card-dates">{_html.escape(dates)}</div>' if dates else "")
         + match_tag
+        + stale_tag
         + "</div>"
     )
 
@@ -740,7 +748,7 @@ with tab_add:
 # ---------------------------------------------------------------------------
 with tab_rem:
     rem   = analytics.reminders(df, today=_today_str)
-    stale = analytics.stale_applications(df, today=_today_str)
+    stale = analytics.stale_applications(df, today=_today_str, days=_stale_days)
 
     _has_any = any(not v.empty for v in rem.values()) or not stale.empty
     if not _has_any:
@@ -775,7 +783,7 @@ with tab_rem:
                         st.rerun()
 
         if not stale.empty:
-            st.subheader(f"No reply after 21+ days ({len(stale)})")
+            st.subheader(f"No reply after {_stale_days}+ days ({len(stale)})")
             st.dataframe(
                 stale[["company", "role", "days_waiting"]].rename(
                     columns={"days_waiting": "Days waiting"}),
@@ -834,6 +842,17 @@ with tab_set:
     )
     if new_goal != goal_now:
         db.set_setting(conn, "weekly_goal", str(new_goal))
+        st.rerun()
+
+    st.subheader("Follow-up nudges")
+    stale_now = _stale_days
+    new_stale = st.number_input(
+        "Flag a job on the Board after this many days without moving",
+        min_value=1, max_value=180, value=stale_now, step=1, key="stale_input",
+        help="Applies to jobs in Applied, OA/Screen and Interview.",
+    )
+    if new_stale != stale_now:
+        db.set_setting(conn, "stale_days", str(new_stale))
         st.rerun()
 
     st.subheader("Sample data")

@@ -1890,6 +1890,12 @@ button[data-testid^="stBaseButton"],
   font-size: 0.8rem; padding: 2px 0;
 }
 .stage-history-row span:last-child { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+/* Stale cards: a quiet brown edge and a one-line nudge */
+.board-card--stale { box-shadow: inset 3px 0 0 var(--negative); }
+.board-stale-tag {
+  margin-top: 8px; font-size: 0.72rem; color: var(--negative);
+}
 """
 
 

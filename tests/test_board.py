@@ -48,3 +48,12 @@ def test_timeline_appends_untracked_current_status():
                       "changed_on": [pd.Timestamp("2026-11-01")]})
     tl = analytics.stage_timeline(h, 1, "Offer")
     assert tl[-1] == ("Offer", None)
+
+
+def test_is_stale_only_for_active_stages_past_threshold():
+    assert analytics.is_stale("Applied", 21, 21)
+    assert analytics.is_stale("Interview", 40, 21)
+    assert not analytics.is_stale("Applied", 20, 21)
+    assert not analytics.is_stale("Offer", 90, 21)
+    assert not analytics.is_stale("Wishlist", 90, 21)
+    assert not analytics.is_stale("Applied", None, 21)

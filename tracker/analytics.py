@@ -238,6 +238,14 @@ def days_in_stage(timeline, today=None) -> "int | None":
     return max(0, (today - pd.Timestamp(last).normalize()).days)
 
 
+STALE_STATUSES = ("Applied", "OA/Screen", "Interview")
+
+
+def is_stale(status: str, days: "int | None", threshold: int) -> bool:
+    """An active job that hasn't moved in `threshold` days or more."""
+    return status in STALE_STATUSES and days is not None and days >= threshold
+
+
 # ---------------------------------------------------------------------------
 # Feature: Application heatmap
 # ---------------------------------------------------------------------------
