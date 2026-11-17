@@ -45,6 +45,7 @@ tab_dash, tab_board, tab_apps, tab_add, tab_rem, tab_ats, tab_set = st.tabs(
 
 df = db.load_applications(conn)
 stages_df    = db.load_stages(conn)
+_history_df  = db.load_status_history(conn)
 all_scores_df = db.load_match_scores(conn)
 _latest_scores = analytics.latest_match_scores(all_scores_df)
 _score_by_app: dict = {}
@@ -279,12 +280,44 @@ def _match_history_html(app_scores: pd.DataFrame) -> str:
     return f'<div class="match-history">{"".join(rows_html)}</div>'
 
 
-def _board_card_html(row, today_d: dt.date, match_score: float | None = None) -> str:
-    """Build the HTML for a single board card (no buttons)."""
-    days_ago_str = ""
-    if pd.notna(row.date_applied):
-        days_ago_str = f"{(today_d - row.date_applied.date()).days}d ago"
+def _stepper_html(timeline, status: str, today_d: dt.date) -> str:
+    """Five-dot progress line (Wishlist → Offer) plus 'stage · N days'."""
+    pipe = analytics.PIPELINE
+    closed = status not in pipe
+    if closed:
+        reached = [s for s, _ in timeline if s in pipe]
+        idx = pipe.index(reached[-1]) if reached else -1
+    else:
+        idx = pipe.index(status)
 
+    dots = []
+    for i, name in enumerate(pipe):
+        cls = "step-dot"
+        if i < idx or (i == idx and closed):
+            cls += " step-dot--done"
+        elif i == idx:
+            cls += " step-dot--now"
+        dots.append(f'<span class="{cls}" title="{_html.escape(name)}"></span>')
+    mod = " stepper--closed" if closed else ""
+
+    days = analytics.days_in_stage(timeline, today_d)
+    label = f"{status} at {pipe[idx]}" if closed and idx >= 0 else status
+    when = ""
+    if days is not None:
+        when = " · today" if days == 0 else f" · {days} day{'s' if days != 1 else ''}"
+    sr = f"{label}{when}" if idx < 0 else f"Stage {idx + 1} of {len(pipe)}: {label}{when}"
+    return (
+        f'<div class="stepper{mod}" role="img" aria-label="{_html.escape(sr)}">'
+        f'<div class="step-dots" aria-hidden="true">{"".join(dots)}</div>'
+        f'<div class="step-label" aria-hidden="true">{_html.escape(label)}'
+        f'<span class="step-when">{_html.escape(when)}</span></div>'
+        '</div>'
+    )
+
+
+def _board_card_html(row, today_d: dt.date, match_score: float | None = None,
+                     timeline=None) -> str:
+    """Build the HTML for a single board card (no buttons)."""
     deadline_str = ""
     if pd.notna(row.deadline):
         deadline_str = f"Due {row.deadline.strftime('%b %d')}"
@@ -293,7 +326,7 @@ def _board_card_html(row, today_d: dt.date, match_score: float | None = None) ->
     if hasattr(row, "follow_up_date") and pd.notna(row.follow_up_date):
         fu_str = f"Follow up {row.follow_up_date.strftime('%b %d')}"
 
-    meta  = ", ".join(x for x in [row.location, days_ago_str] if x)
+    meta  = row.location or ""
     dates = " · ".join(x for x in [deadline_str, fu_str] if x)
 
     match_tag = ""
@@ -302,45 +335,63 @@ def _board_card_html(row, today_d: dt.date, match_score: float | None = None) ->
             f'<div class="board-match-tag">Match {int(round(match_score))}</div>'
         )
 
+    timeline = timeline or [(row.status, None)]
     return (
         '<div class="board-card">'
         f'<div class="board-card-company">{_html.escape(row.company)}</div>'
         f'<div class="board-card-role">{_html.escape(row.role)}</div>'
         + (f'<div class="board-card-meta">{_html.escape(meta)}</div>'  if meta  else "")
+        + _stepper_html(timeline, row.status, today_d)
         + (f'<div class="board-card-dates">{_html.escape(dates)}</div>' if dates else "")
         + match_tag
         + "</div>"
     )
 
 
+def _move_to(app_id: int, new_status: str, date_applied) -> None:
+    """Change status; stamp date_applied the first time a job leaves Wishlist."""
+    updates: dict = {"status": new_status}
+    if new_status not in ("Wishlist", "Withdrawn") and pd.isna(date_applied):
+        updates["date_applied"] = _today_str
+    db.update_application(conn, app_id, **updates)
+
+
 def _render_board_cards(group: pd.DataFrame, status_name: str) -> None:
-    """Render board cards (HTML + buttons) for a group of rows."""
+    """Render board cards: stepper card, one-click advance, Move popover."""
     for row in group.itertuples():
-        score = _score_by_app.get(int(row.id))
-        st.markdown(_board_card_html(row, _today, score), unsafe_allow_html=True)
+        app_id = int(row.id)
+        timeline = analytics.stage_timeline(_history_df, app_id, row.status, row.date_applied)
+        st.markdown(
+            _board_card_html(row, _today, _score_by_app.get(app_id), timeline),
+            unsafe_allow_html=True,
+        )
 
         nxt = analytics.next_status(status_name)
-        prv = analytics.prev_status(status_name)
-        btns: list[tuple[str, str]] = []
         if nxt is not None:
-            btns.append(("Next stage", f"nxt_{row.id}"))
-        if status_name != "Rejected":
-            btns.append(("Reject", f"rej_{row.id}"))
-        if prv is not None:
-            btns.append(("Back", f"bck_{row.id}"))
-
-        for label, key in btns:
-            if st.button(label, key=key):
-                if label == "Next stage":
-                    updates: dict = {"status": nxt}
-                    if status_name == "Wishlist" and pd.isna(row.date_applied):
-                        updates["date_applied"] = _today_str
-                    db.update_application(conn, int(row.id), **updates)
-                elif label == "Reject":
-                    db.update_application(conn, int(row.id), status="Rejected")
-                else:  # Back
-                    db.update_application(conn, int(row.id), status=prv)
+            if st.button(f"Move to {nxt} →", key=f"nxt_{app_id}", width="stretch"):
+                _move_to(app_id, nxt, row.date_applied)
                 st.rerun()
+
+        with st.popover("Change stage", width="stretch"):
+            picked = st.radio(
+                f"Stage for {row.company}",
+                db.STATUSES,
+                index=db.STATUSES.index(row.status),
+                key=f"pick_{app_id}_{row.status}",
+            )
+            if picked != row.status:
+                _move_to(app_id, picked, row.date_applied)
+                st.rerun()
+            st.markdown(
+                '<div class="stage-history"><div class="stage-history-head">History</div>'
+                + "".join(
+                    f'<div class="stage-history-row"><span>{_html.escape(s)}</span>'
+                    f'<span>{d.strftime("%b %d") if d is not None and pd.notna(d) else "—"}</span></div>'
+                    for s, d in timeline
+                )
+                + "</div>",
+                unsafe_allow_html=True,
+            )
 
 
 # ---------------------------------------------------------------------------

@@ -208,6 +208,36 @@ def prev_status(status: str) -> "str | None":
         return None
 
 
+PIPELINE = _PIPELINE
+
+
+def stage_timeline(history: pd.DataFrame, app_id: int, status: str,
+                   date_applied=None) -> list[tuple[str, "pd.Timestamp | None"]]:
+    """Ordered (status, date) moves for one application.
+
+    Uses recorded status changes when there are any. Older applications
+    (saved before history existed) fall back to a single entry: the current
+    status, dated by date_applied when known.
+    """
+    rows = history[history["application_id"] == int(app_id)] if not history.empty else history
+    if rows is None or rows.empty:
+        d = date_applied if date_applied is not None and pd.notna(date_applied) else None
+        return [(status, d)]
+    out = [(r.status, r.changed_on) for r in rows.itertuples()]
+    if out[-1][0] != status:  # status was changed outside the tracked path
+        out.append((status, None))
+    return out
+
+
+def days_in_stage(timeline, today=None) -> "int | None":
+    """Days since the last move, or None when the date is unknown."""
+    last = timeline[-1][1] if timeline else None
+    if last is None or pd.isna(last):
+        return None
+    today = pd.Timestamp(today or pd.Timestamp.today().date())
+    return max(0, (today - pd.Timestamp(last).normalize()).days)
+
+
 # ---------------------------------------------------------------------------
 # Feature: Application heatmap
 # ---------------------------------------------------------------------------

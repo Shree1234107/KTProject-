@@ -1842,6 +1842,54 @@ button[data-testid^="stBaseButton"],
   [role="tablist"] { gap: var(--s-4) !important; }
   .page-head { flex-direction: column; gap: var(--s-1); }
 }
+
+/* ------------------------------------------------------------------ */
+/* 34. Board stepper, advance button, stage history                    */
+/* ------------------------------------------------------------------ */
+
+.stepper { margin-top: 10px; }
+.step-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  border: 1.5px solid var(--olive-light);
+  background: var(--surface);
+  flex: none;
+}
+.step-dots {
+  display: flex; align-items: center; justify-content: space-between;
+  position: relative; max-width: 120px;
+}
+.step-dots::before {
+  content: ""; position: absolute; left: 4px; right: 4px; top: 50%;
+  height: 1.5px; background: var(--olive-light); z-index: 0;
+}
+.step-dot { position: relative; z-index: 1; }
+.step-dot--done { background: var(--olive-mid); border-color: var(--olive-mid); }
+.step-dot--now  {
+  background: var(--accent); border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.stepper--closed .step-dot--done { background: var(--negative); border-color: var(--negative); opacity: .55; }
+.step-label {
+  margin-top: 6px; font-size: 0.72rem; font-weight: 600; color: var(--accent);
+}
+.stepper--closed .step-label { color: var(--negative); }
+.step-when { font-weight: 400; color: var(--text-secondary); }
+
+/* Board buttons: compact, sit tight under their card */
+[data-testid="stColumn"] [data-testid="stButton"] button,
+[data-testid="stColumn"] [data-testid="stPopover"] button {
+  min-height: 30px; padding: 2px 8px; font-size: 0.78rem;
+}
+.stage-history { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
+.stage-history-head {
+  font-size: 0.68rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-secondary); margin-bottom: 4px;
+}
+.stage-history-row {
+  display: flex; justify-content: space-between; gap: 16px;
+  font-size: 0.8rem; padding: 2px 0;
+}
+.stage-history-row span:last-child { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 """
 
 

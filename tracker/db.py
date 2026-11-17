@@ -76,6 +76,15 @@ CREATE TABLE IF NOT EXISTS match_scores (
 )
 """
 
+_HISTORY_SCHEMA = """
+CREATE TABLE IF NOT EXISTS status_history (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id INTEGER NOT NULL,
+    status         TEXT NOT NULL,
+    changed_on     TEXT NOT NULL
+)
+"""
+
 _MIGRATIONS = [
     ("referral_name",    "ALTER TABLE applications ADD COLUMN referral_name TEXT DEFAULT ''"),
     ("referral_contact", "ALTER TABLE applications ADD COLUMN referral_contact TEXT DEFAULT ''"),
@@ -102,6 +111,7 @@ def connect(path=None):
     conn.execute(_SETTINGS_SCHEMA)
     conn.execute(_STAGES_SCHEMA)
     conn.execute(_MATCH_SCORES_SCHEMA)
+    conn.execute(_HISTORY_SCHEMA)
     _migrate(conn)
     return conn
 
@@ -129,8 +139,30 @@ def add_application(conn, company, role, location="", status="Applied",
             1 if is_sample else 0,
         ),
     )
+    _record_status(conn, cur.lastrowid, status,
+                   date_applied if status != "Wishlist" and date_applied else None)
     conn.commit()
     return cur.lastrowid
+
+
+def _record_status(conn, app_id, status, on=None) -> None:
+    """Append one row to status_history (caller commits)."""
+    conn.execute(
+        "INSERT INTO status_history (application_id, status, changed_on) VALUES (?,?,?)",
+        (int(app_id), status, str(on) if on else str(_dt.date.today())),
+    )
+
+
+def load_status_history(conn, application_id=None) -> pd.DataFrame:
+    """Status changes, oldest first. One row per move."""
+    sql = "SELECT application_id, status, changed_on FROM status_history"
+    params: tuple = ()
+    if application_id is not None:
+        sql += " WHERE application_id=?"
+        params = (int(application_id),)
+    df = pd.read_sql_query(sql + " ORDER BY changed_on, id", conn, params=params)
+    df["changed_on"] = pd.to_datetime(df["changed_on"], errors="coerce")
+    return df
 
 
 def update_application(conn, app_id, **fields):
@@ -146,12 +178,19 @@ def update_application(conn, app_id, **fields):
         raise ValueError("Role cannot be empty")
     if not fields:
         return
+    old = None
+    if "status" in fields:
+        r = conn.execute("SELECT status FROM applications WHERE id=?", (app_id,)).fetchone()
+        old = r["status"] if r else None
     sets = ", ".join(f"{k}=?" for k in fields)
     conn.execute(f"UPDATE applications SET {sets} WHERE id=?", (*fields.values(), app_id))
+    if "status" in fields and old is not None and fields["status"] != old:
+        _record_status(conn, app_id, fields["status"])
     conn.commit()
 
 
 def delete_application(conn, app_id):
+    conn.execute("DELETE FROM status_history WHERE application_id=?", (app_id,))
     conn.execute("DELETE FROM stages WHERE application_id=?", (app_id,))
     conn.execute("DELETE FROM match_scores WHERE application_id=?", (app_id,))
     conn.execute("DELETE FROM applications WHERE id=?", (app_id,))
@@ -393,6 +432,8 @@ def load_sample_data(conn) -> int:
 
 def clear_sample_data(conn) -> None:
     """Remove all sample rows (is_sample=1)."""
+    conn.execute("DELETE FROM status_history WHERE application_id IN "
+                 "(SELECT id FROM applications WHERE is_sample=1)")
     conn.execute("DELETE FROM stages WHERE is_sample=1")
     conn.execute("DELETE FROM match_scores WHERE is_sample=1")
     conn.execute("DELETE FROM applications WHERE is_sample=1")
@@ -402,6 +443,7 @@ def clear_sample_data(conn) -> None:
 def clear_all_data(conn) -> None:
     """Remove every row from applications, stages and match_scores."""
     conn.execute("DELETE FROM stages")
+    conn.execute("DELETE FROM status_history")
     conn.execute("DELETE FROM match_scores")
     conn.execute("DELETE FROM applications")
     conn.commit()
