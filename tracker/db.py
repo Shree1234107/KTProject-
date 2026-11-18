@@ -85,6 +85,30 @@ CREATE TABLE IF NOT EXISTS status_history (
 )
 """
 
+CONTACT_ROLES = ["Recruiter", "Referral", "Hiring manager", "Interviewer", "Other"]
+
+_CONTACTS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS contacts (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id INTEGER NOT NULL,
+    name           TEXT NOT NULL,
+    role           TEXT NOT NULL DEFAULT 'Other',
+    contact        TEXT DEFAULT '',
+    last_contacted TEXT,
+    is_sample      INTEGER NOT NULL DEFAULT 0
+)
+"""
+
+_NOTES_SCHEMA = """
+CREATE TABLE IF NOT EXISTS notes (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id INTEGER NOT NULL,
+    note_date      TEXT NOT NULL,
+    body           TEXT NOT NULL,
+    is_sample      INTEGER NOT NULL DEFAULT 0
+)
+"""
+
 _MIGRATIONS = [
     ("referral_name",    "ALTER TABLE applications ADD COLUMN referral_name TEXT DEFAULT ''"),
     ("referral_contact", "ALTER TABLE applications ADD COLUMN referral_contact TEXT DEFAULT ''"),
@@ -112,6 +136,8 @@ def connect(path=None):
     conn.execute(_STAGES_SCHEMA)
     conn.execute(_MATCH_SCORES_SCHEMA)
     conn.execute(_HISTORY_SCHEMA)
+    conn.execute(_CONTACTS_SCHEMA)
+    conn.execute(_NOTES_SCHEMA)
     _migrate(conn)
     return conn
 
@@ -190,6 +216,8 @@ def update_application(conn, app_id, **fields):
 
 
 def delete_application(conn, app_id):
+    conn.execute("DELETE FROM contacts WHERE application_id=?", (app_id,))
+    conn.execute("DELETE FROM notes WHERE application_id=?", (app_id,))
     conn.execute("DELETE FROM status_history WHERE application_id=?", (app_id,))
     conn.execute("DELETE FROM stages WHERE application_id=?", (app_id,))
     conn.execute("DELETE FROM match_scores WHERE application_id=?", (app_id,))
@@ -434,6 +462,9 @@ def clear_sample_data(conn) -> None:
     """Remove all sample rows (is_sample=1)."""
     conn.execute("DELETE FROM status_history WHERE application_id IN "
                  "(SELECT id FROM applications WHERE is_sample=1)")
+    for t in ("contacts", "notes"):
+        conn.execute(f"DELETE FROM {t} WHERE application_id IN "
+                     "(SELECT id FROM applications WHERE is_sample=1)")
     conn.execute("DELETE FROM stages WHERE is_sample=1")
     conn.execute("DELETE FROM match_scores WHERE is_sample=1")
     conn.execute("DELETE FROM applications WHERE is_sample=1")
@@ -444,6 +475,8 @@ def clear_all_data(conn) -> None:
     """Remove every row from applications, stages and match_scores."""
     conn.execute("DELETE FROM stages")
     conn.execute("DELETE FROM status_history")
+    conn.execute("DELETE FROM contacts")
+    conn.execute("DELETE FROM notes")
     conn.execute("DELETE FROM match_scores")
     conn.execute("DELETE FROM applications")
     conn.commit()
@@ -466,3 +499,83 @@ def set_setting(conn, key: str, value: str) -> None:
         (key, value),
     )
     conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Contacts and dated notes (any number per application)
+# ---------------------------------------------------------------------------
+
+def add_contact(conn, application_id, name, role="Other", contact="",
+                last_contacted=None) -> int:
+    if not str(name).strip():
+        raise ValueError("Contact name is required")
+    if role not in CONTACT_ROLES:
+        raise ValueError(f"Invalid role: {role}")
+    cur = conn.execute(
+        "INSERT INTO contacts (application_id, name, role, contact, last_contacted) "
+        "VALUES (?,?,?,?,?)",
+        (int(application_id), name.strip(), role, contact.strip(),
+         str(last_contacted) if last_contacted else None),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def update_contact(conn, contact_id, **fields) -> None:
+    allowed = {"name", "role", "contact", "last_contacted"}
+    bad = set(fields) - allowed
+    if bad:
+        raise ValueError(f"Unknown fields: {bad}")
+    if "role" in fields and fields["role"] not in CONTACT_ROLES:
+        raise ValueError(f"Invalid role: {fields['role']}")
+    if not fields:
+        return
+    if "last_contacted" in fields and fields["last_contacted"]:
+        fields["last_contacted"] = str(fields["last_contacted"])
+    sets = ", ".join(f"{k}=?" for k in fields)
+    conn.execute(f"UPDATE contacts SET {sets} WHERE id=?", (*fields.values(), int(contact_id)))
+    conn.commit()
+
+
+def delete_contact(conn, contact_id) -> None:
+    conn.execute("DELETE FROM contacts WHERE id=?", (int(contact_id),))
+    conn.commit()
+
+
+def load_contacts(conn, application_id=None) -> pd.DataFrame:
+    sql = "SELECT * FROM contacts"
+    params: tuple = ()
+    if application_id is not None:
+        sql += " WHERE application_id=?"
+        params = (int(application_id),)
+    df = pd.read_sql_query(sql + " ORDER BY id", conn, params=params)
+    df["last_contacted"] = pd.to_datetime(df["last_contacted"], errors="coerce")
+    return df
+
+
+def add_note(conn, application_id, body, note_date=None) -> int:
+    if not str(body).strip():
+        raise ValueError("Note is empty")
+    cur = conn.execute(
+        "INSERT INTO notes (application_id, note_date, body) VALUES (?,?,?)",
+        (int(application_id), str(note_date or _dt.date.today()), body.strip()),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def delete_note(conn, note_id) -> None:
+    conn.execute("DELETE FROM notes WHERE id=?", (int(note_id),))
+    conn.commit()
+
+
+def load_notes(conn, application_id=None) -> pd.DataFrame:
+    """Notes, newest first."""
+    sql = "SELECT * FROM notes"
+    params: tuple = ()
+    if application_id is not None:
+        sql += " WHERE application_id=?"
+        params = (int(application_id),)
+    df = pd.read_sql_query(sql + " ORDER BY note_date DESC, id DESC", conn, params=params)
+    df["note_date"] = pd.to_datetime(df["note_date"], errors="coerce")
+    return df

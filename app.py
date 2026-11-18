@@ -46,6 +46,8 @@ tab_dash, tab_board, tab_apps, tab_add, tab_rem, tab_ats, tab_set = st.tabs(
 df = db.load_applications(conn)
 stages_df    = db.load_stages(conn)
 _history_df  = db.load_status_history(conn)
+_contacts_df = db.load_contacts(conn)
+_notes_df    = db.load_notes(conn)
 all_scores_df = db.load_match_scores(conn)
 _latest_scores = analytics.latest_match_scores(all_scores_df)
 _score_by_app: dict = {}
@@ -316,6 +318,16 @@ def _stepper_html(timeline, status: str, today_d: dt.date) -> str:
     )
 
 
+def _count_html(row) -> str:
+    n_c, n_n = _detail_counts(row)
+    parts = []
+    if n_c:
+        parts.append(f"{n_c} contact{'s' if n_c != 1 else ''}")
+    if n_n:
+        parts.append(f"{n_n} note{'s' if n_n != 1 else ''}")
+    return f'<div class="board-card-counts">{" · ".join(parts)}</div>' if parts else ""
+
+
 def _board_card_html(row, today_d: dt.date, match_score: float | None = None,
                      timeline=None) -> str:
     """Build the HTML for a single board card (no buttons)."""
@@ -351,6 +363,7 @@ def _board_card_html(row, today_d: dt.date, match_score: float | None = None,
         + _stepper_html(timeline, row.status, today_d)
         + (f'<div class="board-card-dates">{_html.escape(dates)}</div>' if dates else "")
         + match_tag
+        + _count_html(row)
         + stale_tag
         + "</div>"
     )
@@ -362,6 +375,108 @@ def _move_to(app_id: int, new_status: str, date_applied) -> None:
     if new_status not in ("Wishlist", "Withdrawn") and pd.isna(date_applied):
         updates["date_applied"] = _today_str
     db.update_application(conn, app_id, **updates)
+
+
+def _fmt_d(d) -> str:
+    return d.strftime("%b %d") if d is not None and pd.notna(d) else ""
+
+
+def _old_notes(row) -> str:
+    """The original single notes field, minus the sample-data marker."""
+    txt = str(getattr(row, "notes", "") or "").strip()
+    return "" if txt == "[sample]" else txt
+
+
+def _detail_counts(row) -> tuple[int, int]:
+    """(contacts, notes) for a job, counting the old referral and notes fields."""
+    aid = int(row.id)
+    n_c = int((_contacts_df["application_id"] == aid).sum()) if not _contacts_df.empty else 0
+    n_n = int((_notes_df["application_id"] == aid).sum()) if not _notes_df.empty else 0
+    if str(getattr(row, "referral_name", "") or "").strip():
+        n_c += 1
+    if _old_notes(row):
+        n_n += 1
+    return n_c, n_n
+
+
+def _details_panel(row, prefix: str) -> None:
+    """Contacts and dated notes for one job, with quick-add forms."""
+    aid = int(row.id)
+    contacts = _contacts_df[_contacts_df["application_id"] == aid] if not _contacts_df.empty else _contacts_df
+    notes = _notes_df[_notes_df["application_id"] == aid] if not _notes_df.empty else _notes_df
+
+    # --- Notes ---
+    st.markdown('<div class="detail-head">Notes</div>', unsafe_allow_html=True)
+    with st.form(f"{prefix}_addn_{aid}", clear_on_submit=True, border=False):
+        body = st.text_area("New note", key=f"{prefix}_nb_{aid}", height=80,
+                            placeholder="e.g. Recruiter said decision by Dec 1")
+        if st.form_submit_button("Add note"):
+            if not body.strip():
+                st.error("Write something first.")
+            else:
+                db.add_note(conn, aid, body)
+                st.rerun()
+    for n in notes.itertuples():
+        left, right = st.columns([5, 1], vertical_alignment="top")
+        left.markdown(
+            f'<div class="detail-row"><span class="detail-sub">{_fmt_d(n.note_date)}</span><br>'
+            f'{_html.escape(n.body)}</div>',
+            unsafe_allow_html=True,
+        )
+        if right.button("✕", key=f"{prefix}_deln_{n.id}", help="Delete note", type="tertiary"):
+            db.delete_note(conn, int(n.id))
+            st.rerun()
+    old = _old_notes(row)
+    if old:
+        st.markdown(
+            '<div class="detail-row"><span class="detail-sub">Earlier notes</span><br>'
+            f'{_html.escape(old)}</div>',
+            unsafe_allow_html=True,
+        )
+    elif notes.empty:
+        st.caption("No notes yet.")
+
+    # --- Contacts ---
+    st.markdown('<div class="detail-head">Contacts</div>', unsafe_allow_html=True)
+    ref_name = str(getattr(row, "referral_name", "") or "").strip()
+    if ref_name:
+        ref_c = str(getattr(row, "referral_contact", "") or "").strip()
+        st.markdown(
+            f'<div class="detail-row"><b>{_html.escape(ref_name)}</b> · Referral'
+            + (f'<br><span class="detail-sub">{_html.escape(ref_c)}</span>' if ref_c else "")
+            + "</div>",
+            unsafe_allow_html=True,
+        )
+    for c in contacts.itertuples():
+        sub = " · ".join(x for x in [
+            str(c.contact or ""),
+            f"last contacted {_fmt_d(c.last_contacted)}" if _fmt_d(c.last_contacted) else "",
+        ] if x)
+        left, right = st.columns([5, 1], vertical_alignment="center")
+        left.markdown(
+            f'<div class="detail-row"><b>{_html.escape(c.name)}</b> · {_html.escape(c.role)}'
+            + (f'<br><span class="detail-sub">{_html.escape(sub)}</span>' if sub else "")
+            + "</div>",
+            unsafe_allow_html=True,
+        )
+        if right.button("✕", key=f"{prefix}_delc_{c.id}", help=f"Remove {c.name}",
+                        type="tertiary"):
+            db.delete_contact(conn, int(c.id))
+            st.rerun()
+    if contacts.empty and not ref_name:
+        st.caption("No contacts yet.")
+
+    with st.expander("Add a contact"), st.form(f"{prefix}_addc_{aid}", clear_on_submit=True, border=False):
+        name = st.text_input("Name", key=f"{prefix}_cn_{aid}")
+        role = st.selectbox("Role", db.CONTACT_ROLES, key=f"{prefix}_cr_{aid}")
+        how = st.text_input("Email or LinkedIn", key=f"{prefix}_ce_{aid}")
+        last = st.date_input("Last contacted", value=None, key=f"{prefix}_cl_{aid}")
+        if st.form_submit_button("Add contact"):
+            if not name.strip():
+                st.error("Add a name first.")
+            else:
+                db.add_contact(conn, aid, name, role, how, last)
+                st.rerun()
 
 
 def _render_board_cards(group: pd.DataFrame, status_name: str) -> None:
@@ -401,6 +516,9 @@ def _render_board_cards(group: pd.DataFrame, status_name: str) -> None:
                 + "</div>",
                 unsafe_allow_html=True,
             )
+
+        with st.popover("Contacts & notes", width="stretch", key=f"det_{app_id}"):
+            _details_panel(row, "bd")
 
 
 # ---------------------------------------------------------------------------
@@ -612,7 +730,7 @@ with tab_apps:
         new_ref_name    = eb.text_input("Referral name",     cur.get("referral_name", ""), key=f"rn{choice}")
         new_ref_contact = ea.text_input("Referral contact",  cur.get("referral_contact", ""), key=f"rc{choice}")
         new_follow_up   = eb.date_input("Follow-up date",    value=_to_date(cur.get("follow_up_date")),  key=f"fu{choice}")
-        new_notes       = st.text_area("Notes",              cur.get("notes", ""),         key=f"no{choice}")
+        new_notes       = st.text_area("Earlier notes",      cur.get("notes", ""),         key=f"no{choice}")
 
         b1, b2, _ = st.columns([1, 1, 6])
         if b1.button("Save"):
@@ -637,6 +755,11 @@ with tab_apps:
         if b2.button("Delete"):
             db.delete_application(conn, int(choice))
             st.rerun()
+
+        # --- Contacts & notes ---
+        st.divider()
+        st.subheader("Contacts & notes")
+        _details_panel(next(df[df["id"] == choice].itertuples()), "ap")
 
         # --- Interview stages ---
         st.divider()

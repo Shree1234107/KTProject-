@@ -57,3 +57,22 @@ def test_is_stale_only_for_active_stages_past_threshold():
     assert not analytics.is_stale("Offer", 90, 21)
     assert not analytics.is_stale("Wishlist", 90, 21)
     assert not analytics.is_stale("Applied", None, 21)
+
+
+def test_contacts_and_notes_roundtrip_and_cleanup(tmp_path):
+    import pytest
+    c = _conn(tmp_path)
+    a = db.add_application(c, "Acme", "Intern")
+    cid = db.add_contact(c, a, "Sam Lee", "Recruiter", "sam@acme.com", "2026-11-10")
+    db.add_note(c, a, "first", "2026-11-01")
+    db.add_note(c, a, "second", "2026-11-05")
+    assert list(db.load_contacts(c, a)["name"]) == ["Sam Lee"]
+    assert list(db.load_notes(c, a)["body"]) == ["second", "first"]  # newest first
+    db.update_contact(c, cid, role="Hiring manager")
+    assert db.load_contacts(c, a)["role"].iloc[0] == "Hiring manager"
+    with pytest.raises(ValueError):
+        db.add_contact(c, a, "  ")
+    with pytest.raises(ValueError):
+        db.add_note(c, a, " ")
+    db.delete_application(c, a)
+    assert db.load_contacts(c).empty and db.load_notes(c).empty

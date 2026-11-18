@@ -1896,6 +1896,19 @@ button[data-testid^="stBaseButton"],
 .board-stale-tag {
   margin-top: 8px; font-size: 0.72rem; color: var(--negative);
 }
+
+/* ------------------------------------------------------------------ */
+/* 35. Contacts & notes (Details panel)                                */
+/* ------------------------------------------------------------------ */
+.board-card-counts { margin-top: 6px; font-size: 0.72rem; color: var(--text-secondary); }
+.detail-head {
+  font-size: 0.68rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-secondary); margin: 6px 0 4px;
+  border-bottom: 1px solid var(--border); padding-bottom: 4px;
+}
+.detail-row { font-size: 0.85rem; line-height: 1.4; padding: 3px 0; overflow-wrap: anywhere; }
+.detail-sub { font-size: 0.75rem; color: var(--text-secondary); }
+[data-testid="stPopoverBody"] { min-width: 300px; max-width: 380px; }
 """
 
 
