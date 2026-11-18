@@ -500,8 +500,10 @@ def first_response_days(apps: pd.DataFrame, history: pd.DataFrame) -> pd.DataFra
     first = h.dropna(subset=["on"]).groupby("application_id")["on"].min()
     a = apps.dropna(subset=["date_applied"]).copy()
     a["applied"] = pd.to_datetime(a["date_applied"], errors="coerce")
-    a = a[a["id"].isin(first.index)]
-    a["days"] = (a["id"].map(first) - a["applied"]).dt.days
+    a = a.merge(first.rename("first_on"), left_on="id", right_index=True, how="inner")
+    if a.empty:
+        return pd.DataFrame(columns=cols)
+    a["days"] = (pd.to_datetime(a["first_on"]) - a["applied"]).dt.days
     a = a[a["days"] >= 0]
     a["source"] = a["source"].fillna("").replace("", "No source")
     return a[cols].reset_index(drop=True)

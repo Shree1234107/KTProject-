@@ -13,3 +13,12 @@ def test_first_response_days_and_past_entry(tmp_path):
     r = analytics.first_response_days(db.load_applications(conn), h)
     assert sorted(r["days"]) == [4, 10]
     assert set(r["source"]) == {"LinkedIn", "Referral"}
+
+
+def test_first_response_days_no_replies(tmp_path):
+    conn = db.connect(tmp_path / "t.db")
+    db.add_application(conn, "A", "R", status="Applied", date_applied="2026-09-01")
+    db.update_application(conn, 1, status="OA/Screen")  # date_applied kept, history today
+    db.add_application(conn, "B", "R", status="Wishlist")
+    r = analytics.first_response_days(db.load_applications(conn), db.load_status_history(conn))
+    assert list(r.columns) == ["id", "source", "days"]

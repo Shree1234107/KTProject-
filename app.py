@@ -710,8 +710,35 @@ with tab_board:
     df_board = db.load_applications(conn)
     BOARD_COLS = ["Wishlist", "Applied", "OA/Screen", "Interview", "Offer", "Rejected"]
 
+    drag = st.toggle("Drag to move", key="board_drag",
+                     help="Drag cards between columns to change their stage.")
     if df_board.empty:
         st.info("No applications yet. Add one in the Add tab.")
+    elif drag:
+        from streamlit_sortables import sort_items
+        before, labels = [], {}
+        for status_name in BOARD_COLS:
+            items = []
+            for r in df_board[df_board["status"] == status_name].itertuples():
+                lab = f"{r.company} — {r.role}  #{r.id}"
+                labels[lab] = (int(r.id), r.date_applied)
+                items.append(lab)
+            before.append({"header": status_name, "items": items})
+        after = sort_items(before, multi_containers=True, direction="horizontal",
+                           key=f"drag_{st.session_state.get('drag_n', 0)}")
+        moved = False
+        for col in after or []:
+            for lab in col["items"]:
+                aid, d_app = labels[lab]
+                old_status = next(c["header"] for c in before if lab in c["items"])
+                if old_status != col["header"]:
+                    _move_to(aid, col["header"], d_app)
+                    moved = True
+        if moved:
+            st.session_state["drag_n"] = st.session_state.get("drag_n", 0) + 1
+            st.session_state["mac_dirty"] = True
+            st.rerun()
+        st.caption("Turn off “Drag to move” to see full cards, notes and buttons.")
     else:
         bcols = st.columns(len(BOARD_COLS))
         for col_st, status_name in zip(bcols, BOARD_COLS):
