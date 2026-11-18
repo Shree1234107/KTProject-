@@ -5,7 +5,7 @@ import html as _html
 import pandas as pd
 import streamlit as st
 
-from tracker import analytics, charts, db, ics as _ics, styles
+from tracker import analytics, charts, coverletter as cl, db, ics as _ics, styles
 from tracker.ats import report as _ats_report
 from tracker.ats import ui as ats_ui
 from tracker.tiles import goal_line_html, stat_tile_html
@@ -39,8 +39,9 @@ st.markdown(
     '</div>',
     unsafe_allow_html=True,
 )
-tab_dash, tab_board, tab_apps, tab_add, tab_rem, tab_ats, tab_set = st.tabs(
-    ["Dashboard", "Board", "Applications", "Add", "Reminders", "Resume Matcher", "Settings"]
+tab_dash, tab_board, tab_apps, tab_add, tab_rem, tab_ats, tab_cl, tab_set = st.tabs(
+    ["Dashboard", "Board", "Applications", "Add", "Reminders", "Resume Matcher",
+     "Cover Letter", "Settings"]
 )
 
 df = db.load_applications(conn)
@@ -948,6 +949,142 @@ with tab_rem:
 # ---------------------------------------------------------------------------
 with tab_ats:
     ats_ui.render(conn)
+
+# ---------------------------------------------------------------------------
+# Cover Letter — resume + template + job description -> PDF
+# ---------------------------------------------------------------------------
+_CL_EXAMPLE = """{date}
+
+Dear {hiring_manager},
+
+I'm excited to apply for the {role} position at {company}. [Why this company interests you.]
+
+[A paragraph about your most relevant experience.] I've built strong skills in {skills}, which line up with what your team is looking for.
+
+[A closing line about what you'd bring and your availability.]
+
+Thank you for your time and consideration.
+
+Sincerely,
+[Your name]"""
+
+
+with tab_cl:
+    st.caption(
+        "Your resume and template are saved on this computer so you only enter them once. "
+        "Nothing is sent anywhere unless you pick an Ollama cloud model."
+    )
+
+    # --- 1. Resume ---
+    st.subheader("1. Your resume")
+    saved_resume = db.get_setting(conn, "cl_resume", "")
+    up = st.file_uploader("Upload your resume (PDF)", type=["pdf"], key="cl_pdf")
+    if up is not None and st.session_state.get("cl_pdf_seen") != up.file_id:
+        try:
+            from tracker.ats.extractor import extract_text_from_pdf
+            saved_resume = extract_text_from_pdf(up.getvalue()).strip()
+            db.set_setting(conn, "cl_resume", saved_resume)
+            st.session_state["cl_pdf_seen"] = up.file_id
+            st.session_state["cl_resume_text"] = saved_resume
+        except Exception as e:  # pdfplumber errors vary
+            st.error(f"Couldn't read that PDF: {e}")
+    resume_text = st.text_area(
+        "Resume text (you can edit it)", value=saved_resume, height=160, key="cl_resume_text",
+    )
+    if resume_text != saved_resume:
+        db.set_setting(conn, "cl_resume", resume_text)
+
+    # --- 2. Template ---
+    st.subheader("2. Your template")
+    saved_tpl = db.get_setting(conn, "cl_template", "") or _CL_EXAMPLE
+    st.markdown(
+        '<div class="cl-placeholders">'
+        + "".join(f"<span><code>{_html.escape(k)}</code> {_html.escape(v)}</span>"
+                  for k, v in cl.PLACEHOLDERS.items())
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+    template = st.text_area("Template", value=saved_tpl, height=260, key="cl_template_text")
+    if template != db.get_setting(conn, "cl_template", ""):
+        db.set_setting(conn, "cl_template", template)
+
+    # --- 3. Job ---
+    st.subheader("3. The job")
+    job_opts = [None] + (list(df["id"]) if not df.empty else [])
+    pick = st.selectbox(
+        "Fill in from a job in your tracker (optional)", job_opts,
+        format_func=lambda i: "—" if i is None else
+        f"{df.loc[df.id == i, 'company'].iloc[0]} — {df.loc[df.id == i, 'role'].iloc[0]}",
+        key="cl_pick",
+    )
+    pick_row = df[df["id"] == pick].iloc[0] if pick is not None else None
+    j1, j2, j3 = st.columns(3)
+    company = j1.text_input("Company", value="" if pick_row is None else pick_row["company"],
+                            key=f"cl_co_{pick}")
+    role = j2.text_input("Role", value="" if pick_row is None else pick_row["role"],
+                         key=f"cl_ro_{pick}")
+    manager = j3.text_input("Hiring manager (optional)", key=f"cl_hm_{pick}")
+    jd = st.text_area("Job description", height=200, key="cl_jd",
+                      placeholder="Paste the full job posting here.")
+
+    # --- 4. Write ---
+    st.subheader("4. Write the letter")
+    models = cl.ollama_models()
+    ways = ["Fill my template (no AI)"]
+    if models:
+        ways.insert(0, "Write with AI (Ollama)")
+    way = st.radio("How", ways, horizontal=True, key="cl_way")
+    model = None
+    if way.startswith("Write with AI"):
+        def _model_label(m):
+            where = ("cloud: text leaves this computer" if m["cloud"]
+                     else f"on this computer, {m['size_gb']} GB")
+            return f"{m['name']} · {where}"
+        labels = {m["name"]: _model_label(m) for m in models}
+        saved_model = db.get_setting(conn, "cl_model", "")
+        names = list(labels)
+        model = st.selectbox("Model", names,
+                             index=names.index(saved_model) if saved_model in names else 0,
+                             format_func=labels.get, key="cl_model_pick")
+        if model != saved_model:
+            db.set_setting(conn, "cl_model", model)
+    elif not models:
+        st.caption("To write with AI, install and open Ollama (free, ollama.com), then reload this page.")
+
+    missing = [n for n, v in [("company", company), ("role", role)] if not v.strip()]
+    if way.startswith("Write with AI"):
+        missing += [n for n, v in [("resume", resume_text), ("job description", jd)] if not v.strip()]
+    if st.button("Write cover letter", type="primary", key="cl_go"):
+        if missing:
+            st.error("Add the " + ", ".join(missing) + " first.")
+        elif way.startswith("Write with AI"):
+            with st.spinner(f"Writing with {model}… this can take a minute or two."):
+                try:
+                    st.session_state["cl_draft"] = cl.generate_with_ollama(
+                        model, cl.build_prompt(resume_text, jd, template, company, role, manager))
+                except RuntimeError as e:
+                    st.error(f"Ollama couldn't write the letter: {e}")
+        else:
+            skills = cl.shared_skills(resume_text, jd)
+            st.session_state["cl_draft"] = cl.fill_template(
+                template, cl.fields_for(company, role, manager, skills))
+        st.session_state["cl_for"] = (company, role)
+
+    # --- 5. Edit + download ---
+    if st.session_state.get("cl_draft"):
+        st.subheader("5. Review and download")
+        draft = st.text_area("Your letter (edit anything before downloading)",
+                             value=st.session_state["cl_draft"], height=380, key="cl_edit")
+        if "{" in draft and "}" in draft:
+            st.caption("Heads up: the letter still has a {placeholder} in it.")
+        co, ro = st.session_state.get("cl_for", (company, role))
+        st.download_button(
+            "Download PDF",
+            data=cl.to_pdf(draft, title=f"Cover letter — {co}"),
+            file_name=cl.file_name(co, ro),
+            mime="application/pdf",
+            key="cl_dl",
+        )
 
 # ---------------------------------------------------------------------------
 # Settings — weekly target, sample data, clear all

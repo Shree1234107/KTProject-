@@ -52,7 +52,8 @@ Status key: **Built** = works today, **Planned** = agreed in the project plan, *
 | Referral tracking | Referrer name and contact per application; compare referred vs. cold response rates | Built |
 | Interview stages | Log each round (recruiter screen, online assessment, technical, behavioral, take-home, onsite/final) with date and outcome (Scheduled, Passed, Failed, Pending); pass rate by stage on the Dashboard | Built |
 | Follow-up reminders | Follow-up date per application; a Reminders tab listing overdue, due today and upcoming items, with mark done and snooze 3 or 7 days; flags applications with no reply after 21+ days | Built |
-| Kanban board | Drag-free board tab with one column per status; move cards forward/back/to rejected; "Show N more" for long columns; withdrawn apps in a collapsed expander | Built |
+| Kanban board | One column per status. Each card shows progress dots and days in its stage, a one-click "Move to [next stage]" button, a "Change stage" menu to jump to any stage with that job's stage history, and a "Contacts & notes" panel. Cards idle past a set number of days (Settings, default 21) are flagged "Quiet N days · follow up?" | Built |
+| Contacts & notes | Any number of contacts per job (name, role, email or LinkedIn, last contacted) and dated notes, on the Board and in the Applications tab | Built |
 | Activity heatmap | GitHub-style 26-week calendar grid on the Dashboard; cell shading by application count per day | Built |
 | Funnel chart | Horizontal bars Applied → Responded → Interviewed → Offer with conversion rates | Built |
 | Weekly goal | Persistent weekly application target; progress bar; current and longest streak | Built |
@@ -83,6 +84,18 @@ Score a resume against a job description and get specific tips. Runs locally; no
 | Link scores to applications | Save a match score against a tracked application; view score history and trend chart in the Applications tab; latest score shown on Board cards | Built |
 
 To add skills or aliases, edit `tracker/ats/data/skills.json`.
+
+### Cover Letter tab
+
+Write a cover letter for one job from your resume, your own template and the job description, then download it as a PDF. Your resume and template are saved locally so you enter them once.
+
+| Feature | What it does | Status |
+|---|---|---|
+| Fill my template (no AI) | Replaces `{company}`, `{role}`, `{hiring_manager}`, `{skills}` and `{date}` in your template. `{skills}` lists skills that are in both your resume and the job description | Built |
+| Write with AI (Ollama) | A model running in [Ollama](https://ollama.com) (free) writes a tailored letter in your template's style, using only experience from your resume. Local models keep everything on your computer; models ending in `:cloud` send text to Ollama's servers | Built |
+| Edit and download | Edit the letter on the page, then download a US Letter PDF named `Cover_Letter_Company_Role.pdf` | Built |
+
+To use AI: install Ollama, open it, and download a model that fits your computer's memory (for example, a model of 8B parameters or fewer on a 16 GB laptop), then reload the app.
 
 ## Roadmap
 

@@ -1912,6 +1912,18 @@ button[data-testid^="stBaseButton"],
 
 /* Hide Streamlit's "Press Enter to submit form" hints */
 [data-testid="InputInstructions"] { display: none !important; }
+
+/* ------------------------------------------------------------------ */
+/* 36. Cover Letter tab                                                */
+/* ------------------------------------------------------------------ */
+.cl-placeholders {
+  display: flex; flex-wrap: wrap; gap: 6px 16px;
+  font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 8px;
+}
+.cl-placeholders code {
+  background: var(--accent-faint); color: var(--accent);
+  padding: 1px 5px; border-radius: 4px; margin-right: 4px;
+}
 """
 
 
