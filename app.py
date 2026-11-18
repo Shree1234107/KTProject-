@@ -49,6 +49,8 @@ df = db.load_applications(conn)
 stages_df    = db.load_stages(conn)
 _history_df  = db.load_status_history(conn)
 _contacts_df = db.load_contacts(conn)
+_resumes_df = db.load_resumes(conn)
+_app_resumes = db.app_resumes(conn)
 _notes_df    = db.load_notes(conn)
 all_scores_df = db.load_match_scores(conn)
 _latest_scores = analytics.latest_match_scores(all_scores_df)
@@ -410,6 +412,21 @@ def _details_panel(row, prefix: str) -> None:
     aid = int(row.id)
     contacts = _contacts_df[_contacts_df["application_id"] == aid] if not _contacts_df.empty else _contacts_df
     notes = _notes_df[_notes_df["application_id"] == aid] if not _notes_df.empty else _notes_df
+
+    # --- Resume sent ---
+    if not _resumes_df.empty:
+        st.markdown('<div class="detail-head">Resume sent</div>', unsafe_allow_html=True)
+        r_opts = [None] + list(_resumes_df["id"])
+        r_names = dict(zip(_resumes_df["id"], _resumes_df["name"]))
+        cur_r = _app_resumes.get(aid)
+        picked = st.selectbox(
+            "Resume sent", r_opts, index=r_opts.index(cur_r) if cur_r in r_opts else 0,
+            format_func=lambda i: "Not set" if i is None else r_names[i],
+            key=f"{prefix}_res_{aid}", label_visibility="collapsed",
+        )
+        if picked != cur_r:
+            db.set_app_resume(conn, aid, picked)
+            st.rerun()
 
     # --- Notes ---
     st.markdown('<div class="detail-head">Notes</div>', unsafe_allow_html=True)
@@ -1117,11 +1134,41 @@ with tab_cl:
             st.session_state["cl_resume_text"] = saved_resume
         except Exception as e:  # pdfplumber errors vary
             st.error(f"Couldn't read that PDF: {e}")
+    if not _resumes_df.empty:
+        v_names = dict(zip(_resumes_df["id"], _resumes_df["name"]))
+        v_pick = st.selectbox(
+            "Use a saved version", [None] + list(_resumes_df["id"]),
+            format_func=lambda i: "—" if i is None else v_names[i], key="cl_ver",
+        )
+        if v_pick is not None and st.session_state.get("cl_ver_seen") != v_pick:
+            saved_resume = _resumes_df.loc[_resumes_df.id == v_pick, "body"].iloc[0]
+            db.set_setting(conn, "cl_resume", saved_resume)
+            st.session_state["cl_resume_text"] = saved_resume
+        st.session_state["cl_ver_seen"] = v_pick
     resume_text = st.text_area(
         "Resume text (you can edit it)", value=saved_resume, height=160, key="cl_resume_text",
     )
     if resume_text != saved_resume:
         db.set_setting(conn, "cl_resume", resume_text)
+    with st.popover("Save as a version", key="cl_save_ver"):
+        st.caption("Name it so you can track which one you sent to each job "
+                   "(pick it under Contacts & notes on the job).")
+        v_name = st.text_input("Name", placeholder="e.g. Data analyst v2", key="cl_ver_name")
+        if st.button("Save version", key="cl_ver_btn"):
+            try:
+                db.save_resume(conn, v_name, resume_text)
+                st.toast(f"Saved “{v_name.strip()}”")
+                st.rerun()
+            except ValueError as e:
+                st.error(str(e))
+        if not _resumes_df.empty:
+            st.divider()
+            for r in _resumes_df.itertuples():
+                a, b = st.columns([5, 1], vertical_alignment="center")
+                a.caption(f"{r.name} · saved {r.created_on}")
+                if b.button("✕", key=f"cl_delver_{r.id}", type="tertiary", help="Delete version"):
+                    db.delete_resume(conn, int(r.id))
+                    st.rerun()
 
     # --- 2. Template ---
     st.subheader("2. Your template")
@@ -1170,6 +1217,11 @@ with tab_cl:
             key="cl_pick",
         )
     pick_row = df[df["id"] == pick].iloc[0] if pick is not None else None
+    if pick is not None and _app_resumes.get(int(pick)):
+        _rid = _app_resumes[int(pick)]
+        _rn = _resumes_df.loc[_resumes_df.id == _rid, "name"]
+        if not _rn.empty:
+            st.caption(f"You sent **{_rn.iloc[0]}** to this job. Pick it above to use that text.")
     guessed = st.session_state.get("cl_guess", {}) if pick is None else {}
     j1, j2, j3 = st.columns(3)
     company = j1.text_input(

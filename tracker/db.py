@@ -121,6 +121,15 @@ CREATE TABLE IF NOT EXISTS tasks (
 )
 """
 
+_RESUMES_SCHEMA = """
+CREATE TABLE IF NOT EXISTS resumes (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    body       TEXT NOT NULL,
+    created_on TEXT NOT NULL
+)
+"""
+
 # One row per item mirrored into the Mac Reminders app.
 _MAC_LINKS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS mac_links (
@@ -138,6 +147,7 @@ _MIGRATIONS = [
     ("follow_up_date",   "ALTER TABLE applications ADD COLUMN follow_up_date TEXT"),
     ("is_sample",        "ALTER TABLE applications ADD COLUMN is_sample INTEGER NOT NULL DEFAULT 0"),
     ("stage_time",       "ALTER TABLE stages ADD COLUMN stage_time TEXT"),
+    ("resume_id",        "ALTER TABLE applications ADD COLUMN resume_id INTEGER"),
 ]
 
 
@@ -164,6 +174,7 @@ def connect(path=None):
     conn.execute(_NOTES_SCHEMA)
     conn.execute(_TASKS_SCHEMA)
     conn.execute(_MAC_LINKS_SCHEMA)
+    conn.execute(_RESUMES_SCHEMA)
     _migrate(conn)
     return conn
 
@@ -708,7 +719,51 @@ def restore_from_bytes(conn, data: bytes, keep_copy_dir=None) -> str | None:
     # An older backup may lack newer tables/columns.
     for schema in (SCHEMA, _SETTINGS_SCHEMA, _STAGES_SCHEMA, _MATCH_SCORES_SCHEMA,
                    _HISTORY_SCHEMA, _CONTACTS_SCHEMA, _NOTES_SCHEMA, _TASKS_SCHEMA,
-                   _MAC_LINKS_SCHEMA):
+                   _MAC_LINKS_SCHEMA, _RESUMES_SCHEMA):
         conn.execute(schema)
     _migrate(conn)
     return saved
+
+
+# ---------------------------------------------------------------------------
+# Resume versions
+# ---------------------------------------------------------------------------
+
+def save_resume(conn, name, body):
+    """Save a named resume version (overwrites one with the same name). Returns its id."""
+    name = str(name).strip()
+    if not name:
+        raise ValueError("Give the resume a name")
+    if not str(body).strip():
+        raise ValueError("Resume text is empty")
+    row = conn.execute("SELECT id FROM resumes WHERE name=?", (name,)).fetchone()
+    if row:
+        conn.execute("UPDATE resumes SET body=? WHERE id=?", (body, row[0]))
+        conn.commit()
+        return row[0]
+    cur = conn.execute("INSERT INTO resumes (name, body, created_on) VALUES (?,?,?)",
+                       (name, body, _dt.date.today().isoformat()))
+    conn.commit()
+    return cur.lastrowid
+
+
+def delete_resume(conn, resume_id):
+    conn.execute("UPDATE applications SET resume_id=NULL WHERE resume_id=?", (resume_id,))
+    conn.execute("DELETE FROM resumes WHERE id=?", (resume_id,))
+    conn.commit()
+
+
+def load_resumes(conn):
+    return pd.read_sql_query("SELECT * FROM resumes ORDER BY name COLLATE NOCASE", conn)
+
+
+def set_app_resume(conn, app_id, resume_id):
+    conn.execute("UPDATE applications SET resume_id=? WHERE id=?",
+                 (int(resume_id) if resume_id else None, app_id))
+    conn.commit()
+
+
+def app_resumes(conn):
+    """{application_id: resume_id} for jobs with a resume picked."""
+    rows = conn.execute("SELECT id, resume_id FROM applications WHERE resume_id IS NOT NULL")
+    return {r[0]: r[1] for r in rows}
