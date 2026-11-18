@@ -58,13 +58,15 @@ class _Resp(io.BytesIO):
 
 
 def test_ollama_models_marks_cloud(monkeypatch):
-    payload = {"models": [{"name": "small:4b", "size": 3e9},
-                          {"name": "big:cloud", "remote_model": "big"}]}
+    payload = {"models": [{"name": "big:cloud", "remote_model": "big"},
+                          {"name": "huge:27b", "size": 18e9},
+                          {"name": "small:4b", "size": 3e9}]}
     monkeypatch.setattr(cl.urllib.request, "urlopen",
                         lambda *a, **k: _Resp(json.dumps(payload).encode()))
     ms = cl.ollama_models()
     assert ms[0] == {"name": "small:4b", "cloud": False, "size_gb": 3.0}
-    assert ms[1]["cloud"] is True
+    assert [m["name"] for m in ms] == ["small:4b", "huge:27b", "big:cloud"]
+    assert ms[2]["cloud"] is True
 
 
 def test_generate_surfaces_model_error(monkeypatch):
@@ -79,3 +81,11 @@ def test_memory_error_is_explained(monkeypatch):
     monkeypatch.setattr(cl.urllib.request, "urlopen", lambda *a, **k: _Resp(json.dumps(err).encode()))
     with pytest.raises(RuntimeError, match="too big"):
         cl.generate_with_ollama("m", "p")
+
+
+def test_unbacked_skills_flags_claims_not_on_resume():
+    jd = "Build pipelines with Python and Airflow. Work with Spark. Kubernetes a plus."
+    resume = "Built pipelines in Python and Airflow."
+    letter = "I know Python and Airflow, and I'm familiar with Spark."
+    assert cl.unbacked_skills(letter, resume, jd) == ["Spark"]
+    assert cl.unbacked_skills("I know Python.", resume, jd) == []

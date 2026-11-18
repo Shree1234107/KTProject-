@@ -49,6 +49,21 @@ def shared_skills(resume_text: str, job_description: str, limit: int = 5) -> lis
             for k in wanted if k["keyword"] in names][:limit]
 
 
+def unbacked_skills(letter: str, resume_text: str, job_description: str) -> list[str]:
+    """Skills from the job posting that the letter mentions but the resume doesn't have.
+
+    Small AI models sometimes claim a required skill anyway; this lets the app
+    point it out so the user can fix it before sending.
+    """
+    if not letter.strip() or not job_description.strip():
+        return []
+    wanted = extract_keywords(clean_text(job_description))
+    _, not_on_resume = keywords_in_text(clean_text(resume_text), wanted)
+    in_letter, _ = keywords_in_text(clean_text(letter), not_on_resume)
+    names = {m["keyword"] for m in in_letter}
+    return [_as_written(k["keyword"], job_description) for k in wanted if k["keyword"] in names]
+
+
 def _as_written(keyword: str, text: str) -> str:
     """Use the posting's own spelling ("SQL", "Airflow") for a lowercase keyword."""
     m = re.search(r"(?<![A-Za-z0-9])" + re.escape(keyword) + r"(?![A-Za-z0-9])", text, re.I)
@@ -90,7 +105,8 @@ def fill_template(template: str, fields: dict[str, str]) -> str:
 def ollama_models(timeout: float = 2.0) -> list[dict]:
     """Models installed in Ollama, or [] when Ollama isn't running.
 
-    Each item: {"name", "cloud": bool, "size_gb"}. Cloud models run on
+    Each item: {"name", "cloud": bool, "size_gb"}, on-device models first,
+    smallest first. Cloud models run on
     Ollama's servers, so text sent to them leaves this computer.
     """
     try:
@@ -105,6 +121,8 @@ def ollama_models(timeout: float = 2.0) -> list[dict]:
             "cloud": bool(m.get("remote_model")) or m.get("name", "").endswith(":cloud"),
             "size_gb": round((m.get("size") or 0) / 1e9, 1),
         })
+    # On-device first, smallest first (most likely to fit in memory); cloud last.
+    out.sort(key=lambda m: (m["cloud"], m["size_gb"]))
     return out
 
 
@@ -118,6 +136,8 @@ def build_prompt(resume: str, job_description: str, template: str,
         "- Only mention experience that is in MY RESUME. Never invent jobs, "
         "numbers, schools or skills.\n"
         "- Connect my real experience to what the JOB DESCRIPTION asks for.\n"
+        "- If the job asks for a skill or tool that is NOT in MY RESUME, do not "
+        "claim it, not even 'familiarity'. Leave it out.\n"
         f"- Address it to {fields['{hiring_manager}']} and date it {fields['{date}']}.\n"
         "- Output only the letter text. No notes, no markdown, no subject line "
         "unless my template has one.\n\n"

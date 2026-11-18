@@ -1077,6 +1077,14 @@ with tab_cl:
                              value=st.session_state["cl_draft"], height=380, key="cl_edit")
         if "{" in draft and "}" in draft:
             st.caption("Heads up: the letter still has a {placeholder} in it.")
+        unbacked = cl.unbacked_skills(draft, resume_text, jd)
+        if unbacked:
+            st.warning(
+                "Check before sending: the letter mentions "
+                + ", ".join(unbacked)
+                + ", which " + ("isn't" if len(unbacked) == 1 else "aren't")
+                + " on your resume. Remove it or add it to your resume if it's true."
+            )
         co, ro = st.session_state.get("cl_for", (company, role))
         st.download_button(
             "Download PDF",
