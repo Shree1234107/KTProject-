@@ -109,6 +109,29 @@ CREATE TABLE IF NOT EXISTS notes (
 )
 """
 
+_TASKS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS tasks (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id INTEGER,
+    title          TEXT NOT NULL,
+    due_date       TEXT NOT NULL,
+    due_time       TEXT,
+    done           INTEGER NOT NULL DEFAULT 0,
+    created_on     TEXT NOT NULL
+)
+"""
+
+# One row per item mirrored into the Mac Reminders app.
+_MAC_LINKS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS mac_links (
+    key         TEXT PRIMARY KEY,
+    reminder_id TEXT NOT NULL,
+    title       TEXT NOT NULL,
+    due         TEXT NOT NULL,
+    state       TEXT NOT NULL DEFAULT 'open'
+)
+"""
+
 _MIGRATIONS = [
     ("referral_name",    "ALTER TABLE applications ADD COLUMN referral_name TEXT DEFAULT ''"),
     ("referral_contact", "ALTER TABLE applications ADD COLUMN referral_contact TEXT DEFAULT ''"),
@@ -138,6 +161,8 @@ def connect(path=None):
     conn.execute(_HISTORY_SCHEMA)
     conn.execute(_CONTACTS_SCHEMA)
     conn.execute(_NOTES_SCHEMA)
+    conn.execute(_TASKS_SCHEMA)
+    conn.execute(_MAC_LINKS_SCHEMA)
     _migrate(conn)
     return conn
 
@@ -216,6 +241,7 @@ def update_application(conn, app_id, **fields):
 
 
 def delete_application(conn, app_id):
+    conn.execute("DELETE FROM tasks WHERE application_id=?", (app_id,))
     conn.execute("DELETE FROM contacts WHERE application_id=?", (app_id,))
     conn.execute("DELETE FROM notes WHERE application_id=?", (app_id,))
     conn.execute("DELETE FROM status_history WHERE application_id=?", (app_id,))
@@ -475,6 +501,7 @@ def clear_all_data(conn) -> None:
     """Remove every row from applications, stages and match_scores."""
     conn.execute("DELETE FROM stages")
     conn.execute("DELETE FROM status_history")
+    conn.execute("DELETE FROM tasks")
     conn.execute("DELETE FROM contacts")
     conn.execute("DELETE FROM notes")
     conn.execute("DELETE FROM match_scores")
@@ -579,3 +606,60 @@ def load_notes(conn, application_id=None) -> pd.DataFrame:
     df = pd.read_sql_query(sql + " ORDER BY note_date DESC, id DESC", conn, params=params)
     df["note_date"] = pd.to_datetime(df["note_date"], errors="coerce")
     return df
+
+
+# ---------------------------------------------------------------------------
+# To-dos ("send a thank-you note Thursday") and Mac Reminders links
+# ---------------------------------------------------------------------------
+
+def add_task(conn, title, due_date, application_id=None, due_time=None) -> int:
+    if not str(title).strip():
+        raise ValueError("Say what the reminder is for")
+    if not due_date:
+        raise ValueError("Pick a date")
+    cur = conn.execute(
+        "INSERT INTO tasks (application_id, title, due_date, due_time, created_on) "
+        "VALUES (?,?,?,?,?)",
+        (int(application_id) if application_id else None, title.strip(), str(due_date),
+         str(due_time)[:5] if due_time else None, str(_dt.date.today())),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def set_task_done(conn, task_id, done=True) -> None:
+    conn.execute("UPDATE tasks SET done=? WHERE id=?", (1 if done else 0, int(task_id)))
+    conn.commit()
+
+
+def delete_task(conn, task_id) -> None:
+    conn.execute("DELETE FROM tasks WHERE id=?", (int(task_id),))
+    conn.commit()
+
+
+def load_tasks(conn, include_done=False) -> pd.DataFrame:
+    sql = ("SELECT t.*, a.company, a.role FROM tasks t "
+           "LEFT JOIN applications a ON a.id = t.application_id")
+    if not include_done:
+        sql += " WHERE t.done = 0"
+    df = pd.read_sql_query(sql + " ORDER BY t.due_date, t.due_time, t.id", conn)
+    df["due_date"] = pd.to_datetime(df["due_date"], errors="coerce")
+    return df
+
+
+def load_mac_links(conn) -> dict:
+    rows = conn.execute("SELECT * FROM mac_links").fetchall()
+    return {r["key"]: dict(r) for r in rows}
+
+
+def save_mac_link(conn, key, reminder_id, title, due, state="open") -> None:
+    conn.execute(
+        "INSERT OR REPLACE INTO mac_links (key, reminder_id, title, due, state) VALUES (?,?,?,?,?)",
+        (key, reminder_id, title, due, state),
+    )
+    conn.commit()
+
+
+def set_mac_link_state(conn, key, state) -> None:
+    conn.execute("UPDATE mac_links SET state=? WHERE key=?", (state, key))
+    conn.commit()

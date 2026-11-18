@@ -5,7 +5,7 @@ import html as _html
 import pandas as pd
 import streamlit as st
 
-from tracker import analytics, charts, coverletter as cl, db, ics as _ics, styles
+from tracker import analytics, charts, coverletter as cl, db, ics as _ics, macreminders as mac, styles
 from tracker.ats import report as _ats_report
 from tracker.ats import ui as ats_ui
 from tracker.tiles import goal_line_html, stat_tile_html
@@ -867,6 +867,112 @@ with tab_add:
 # Reminders
 # ---------------------------------------------------------------------------
 with tab_rem:
+    # --- Mac Reminders: settings + automatic sync ---
+    _mac_on = mac.available() and db.get_setting(conn, "mac_sync", "0") == "1"
+    _mac_list = db.get_setting(conn, "mac_list", mac.DEFAULT_LIST)
+    _mac_kinds = set(filter(None, db.get_setting(conn, "mac_kinds", "task,fu,dl,st").split(",")))
+
+    def _mac_sync(show=False):
+        try:
+            with st.spinner("Syncing with Reminders on your Mac…"):
+                r = mac.sync(conn, _mac_list, _mac_kinds, today=_today_str)
+            st.session_state["mac_status"] = (
+                "ok", f"Synced with “{_mac_list}”: {r['created']} added, {r['updated']} updated, "
+                      f"{r['pulled']} marked done from your Mac."
+                + (f" {len(r['errors'])} couldn't be saved." if r["errors"] else ""))
+        except mac.RemindersError as e:
+            st.session_state["mac_status"] = ("error", str(e))
+        st.session_state["mac_synced"] = True
+        st.session_state.pop("mac_dirty", None)
+
+    if _mac_on and (not st.session_state.get("mac_synced") or st.session_state.get("mac_dirty")):
+        _mac_sync()
+        st.rerun()  # show anything that was ticked off on the Mac
+
+    def _changed():
+        st.session_state["mac_dirty"] = True
+        st.rerun()
+
+    # --- New reminder ---
+    st.subheader("New reminder")
+    with st.form("new_task", clear_on_submit=True, border=False):
+        t1, t2, t3 = st.columns([3, 1.2, 1])
+        t_title = t1.text_input("What", placeholder="e.g. Send a thank-you note to Mansfield")
+        t_date = t2.date_input("Date", value=_today + dt.timedelta(days=1))
+        t_time = t3.time_input("Time", value=dt.time(9, 0), step=900)
+        job_ids = [None] + (list(df["id"]) if not df.empty else [])
+        t_job = st.selectbox(
+            "Job (optional)", job_ids,
+            format_func=lambda i: "—" if i is None else
+            f"{df.loc[df.id == i, 'company'].iloc[0]} — {df.loc[df.id == i, 'role'].iloc[0]}",
+        )
+        if st.form_submit_button("Add reminder"):
+            try:
+                db.add_task(conn, t_title, t_date, t_job, t_time.strftime("%H:%M") if t_time else None)
+                _changed()
+            except ValueError as e:
+                st.error(str(e))
+
+    tasks_df = db.load_tasks(conn)
+    if not tasks_df.empty:
+        st.subheader(f"Your to-dos ({len(tasks_df)})")
+        for t in tasks_df.itertuples():
+            when = t.due_date.strftime("%a, %b %-d") + (
+                f" · {dt.datetime.strptime(t.due_time, '%H:%M').strftime('%-I:%M %p')}"
+                if t.due_time else "")
+            late = t.due_date.date() < _today
+            job = f" — {t.company}" if isinstance(t.company, str) and t.company else ""
+            c1, c2, c3, c4 = st.columns([5, 2, 1, 1], vertical_alignment="center")
+            c1.markdown(f"**{_html.escape(t.title)}**{_html.escape(job)}")
+            c2.markdown(f'<span class="{"task-late" if late else "task-when"}">{when}</span>',
+                        unsafe_allow_html=True)
+            if c3.button("Done", key=f"tdone_{t.id}"):
+                db.set_task_done(conn, int(t.id))
+                _changed()
+            if c4.button("✕", key=f"tdel_{t.id}", help="Delete", type="tertiary"):
+                db.delete_task(conn, int(t.id))
+                _changed()
+
+    # --- Mac Reminders panel ---
+    if mac.available():
+        with st.expander("Mac Reminders" + (f" · syncing with “{_mac_list}”" if _mac_on else " · off")):
+            on = st.toggle("Sync with the Reminders app on this Mac", value=_mac_on, key="mac_on")
+            if on != _mac_on:
+                db.set_setting(conn, "mac_sync", "1" if on else "0")
+                st.session_state.pop("mac_synced", None)
+                st.rerun()
+            st.caption(
+                "Reminders show up on your Mac and iPhone. Ticking one off there marks it "
+                "done here the next time this tab syncs, and the other way round. "
+                "The first time, macOS asks to let this app control Reminders."
+            )
+            if on:
+                try:
+                    names = mac.list_names()
+                except mac.RemindersError as e:
+                    names = []
+                    st.error(str(e))
+                opts = names if _mac_list in names else [_mac_list] + names
+                new_list = st.selectbox("Reminders list", opts, index=opts.index(_mac_list),
+                                        key="mac_list_pick",
+                                        help="Pick an existing list, or keep the default to have one made.")
+                if new_list != _mac_list:
+                    db.set_setting(conn, "mac_list", new_list)
+                    _changed()
+                picked = st.multiselect(
+                    "What to send", list(mac.KINDS), default=[k for k in mac.KINDS if k in _mac_kinds],
+                    format_func=mac.KINDS.get, key="mac_kinds_pick")
+                if set(picked) != _mac_kinds:
+                    db.set_setting(conn, "mac_kinds", ",".join(picked))
+                    _changed()
+                if st.button("Sync now", key="mac_sync_now"):
+                    _mac_sync()
+                    st.rerun()
+        status = st.session_state.get("mac_status")
+        if _mac_on and status:
+            (st.caption if status[0] == "ok" else st.error)(status[1])
+
+    st.divider()
     rem   = analytics.reminders(df, today=_today_str)
     stale = analytics.stale_applications(df, today=_today_str, days=_stale_days)
 
@@ -892,15 +998,15 @@ with tab_rem:
                     c2.write(fu_str)
                     if c3.button("Done", key=f"done_{row.id}"):
                         db.update_application(conn, int(row.id), follow_up_date=None)
-                        st.rerun()
+                        _changed()
                     if c4.button("+3d", key=f"s3_{row.id}"):
                         db.update_application(conn, int(row.id),
                                               follow_up_date=str(_today + dt.timedelta(days=3)))
-                        st.rerun()
+                        _changed()
                     if c5.button("+7d", key=f"s7_{row.id}"):
                         db.update_application(conn, int(row.id),
                                               follow_up_date=str(_today + dt.timedelta(days=7)))
-                        st.rerun()
+                        _changed()
 
         if not stale.empty:
             st.subheader(f"No reply after {_stale_days}+ days ({len(stale)})")

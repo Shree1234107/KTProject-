@@ -1924,6 +1924,12 @@ button[data-testid^="stBaseButton"],
   background: var(--accent-faint); color: var(--accent);
   padding: 1px 5px; border-radius: 4px; margin-right: 4px;
 }
+
+/* ------------------------------------------------------------------ */
+/* 37. Reminders: to-dos                                               */
+/* ------------------------------------------------------------------ */
+.task-when { font-size: 0.82rem; color: var(--text-secondary); }
+.task-late { font-size: 0.82rem; color: var(--negative); font-weight: 600; }
 """
 
 
