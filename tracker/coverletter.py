@@ -13,10 +13,13 @@ Two ways to write a letter, both free and private:
 from __future__ import annotations
 
 import datetime as _dt
+import io
 import json
 import re
 import urllib.error
 import urllib.request
+import zipfile
+from xml.etree import ElementTree as _ET
 
 from fpdf import FPDF
 
@@ -96,6 +99,70 @@ def fill_template(template: str, fields: dict[str, str]) -> str:
     for key, val in fields.items():
         out = out.replace(key, val)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Reading a template from a file
+# ---------------------------------------------------------------------------
+
+TEMPLATE_TYPES = ["docx", "pdf", "txt", "md"]
+_W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+def _docx_text(data: bytes) -> str:
+    """Paragraph text from a Word .docx, one paragraph per line."""
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        root = _ET.fromstring(z.read("word/document.xml"))
+    lines = []
+    for p in root.iter(f"{_W}p"):
+        parts = []
+        for node in p.iter():
+            if node.tag == f"{_W}t" and node.text:
+                parts.append(node.text)
+            elif node.tag == f"{_W}tab":
+                parts.append("\t")
+            elif node.tag in (f"{_W}br", f"{_W}cr"):
+                parts.append("\n")
+        lines.append("".join(parts))
+    return "\n".join(lines)
+
+
+def _tidy(text: str) -> str:
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    lines = [ln.rstrip() for ln in text.split("\n")]
+    out = "\n".join(lines)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out.strip()
+
+
+def template_from_file(filename: str, data: bytes) -> str:
+    """Text of an uploaded template (.docx, .pdf, .txt or .md).
+
+    Raises ValueError with a readable message for unsupported or empty files.
+    """
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    try:
+        if ext == "docx":
+            text = _docx_text(data)
+        elif ext == "pdf":
+            from .ats.extractor import extract_text_from_pdf
+            text = extract_text_from_pdf(data)
+        elif ext in ("txt", "md"):
+            text = data.decode("utf-8-sig", errors="replace")
+        else:
+            raise ValueError("Use a .docx, .pdf, .txt or .md file. (For an old .doc file, "
+                             "save it as .docx first.)")
+    except (zipfile.BadZipFile, KeyError, _ET.ParseError) as e:
+        raise ValueError("That Word file couldn't be read. Try saving it again as .docx.") from e
+    text = _tidy(text)
+    if not text:
+        raise ValueError("That file has no text in it. (A scanned PDF won't work; "
+                         "paste the text instead.)")
+    return text
+
+
+def placeholders_in(template: str) -> list[str]:
+    return [k for k in PLACEHOLDERS if k in template]
 
 
 # ---------------------------------------------------------------------------

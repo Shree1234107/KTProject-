@@ -89,3 +89,37 @@ def test_unbacked_skills_flags_claims_not_on_resume():
     letter = "I know Python and Airflow, and I'm familiar with Spark."
     assert cl.unbacked_skills(letter, resume, jd) == ["Spark"]
     assert cl.unbacked_skills("I know Python.", resume, jd) == []
+
+
+def _docx(paragraphs):
+    import zipfile as zf
+    w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    body = "".join(f'<w:p><w:r><w:t xml:space="preserve">{p}</w:t></w:r></w:p>' for p in paragraphs)
+    xml = f'<?xml version="1.0"?><w:document xmlns:w="{w}"><w:body>{body}</w:body></w:document>'
+    buf = io.BytesIO()
+    with zf.ZipFile(buf, "w") as z:
+        z.writestr("word/document.xml", xml)
+    return buf.getvalue()
+
+
+def test_template_from_docx_keeps_paragraphs_and_placeholders():
+    data = _docx(["{date}", "", "Dear {hiring_manager},", "", "", "", "I want the {role} job."])
+    text = cl.template_from_file("My Template.DOCX", data)
+    assert text == "{date}\n\nDear {hiring_manager},\n\nI want the {role} job."
+    assert cl.placeholders_in(text) == ["{role}", "{hiring_manager}", "{date}"]
+
+
+def test_template_from_txt_and_pdf():
+    assert cl.template_from_file("t.txt", "﻿Hello {company}\r\nBye".encode()) == "Hello {company}\nBye"
+    pdf = cl.to_pdf("Dear {hiring_manager},\n\nI like {company}.")
+    text = cl.template_from_file("t.pdf", pdf)
+    assert "{hiring_manager}" in text and "{company}" in text
+
+
+def test_template_from_file_rejects_bad_input():
+    with pytest.raises(ValueError, match=".docx"):
+        cl.template_from_file("old.doc", b"x")
+    with pytest.raises(ValueError, match="Word file"):
+        cl.template_from_file("broken.docx", b"not a zip")
+    with pytest.raises(ValueError, match="no text"):
+        cl.template_from_file("empty.txt", b"   \n ")

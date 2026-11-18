@@ -93,6 +93,7 @@ Write a cover letter for one job from your resume, your own template and the job
 |---|---|---|
 | Fill my template (no AI) | Replaces `{company}`, `{role}`, `{hiring_manager}`, `{skills}` and `{date}` in your template. `{skills}` lists skills that are in both your resume and the job description | Built |
 | Write with AI (Ollama) | A model running in [Ollama](https://ollama.com) (free) writes a tailored letter in your template's style, using only experience from your resume. Local models keep everything on your computer; models ending in `:cloud` send text to Ollama's servers | Built |
+| Upload a template | Load your template from a Word (.docx), PDF, .txt or .md file instead of pasting it; it is saved for next time | Built |
 | Edit and download | Edit the letter on the page, then download a US Letter PDF named `Cover_Letter_Company_Role.pdf` | Built |
 
 To use AI: install Ollama, open it, and download a model that fits your computer's memory (for example `ollama pull llama3.2:3b`, a 2 GB model that runs well on a 16 GB laptop), then reload the app.

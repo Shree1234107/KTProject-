@@ -996,6 +996,19 @@ with tab_cl:
 
     # --- 2. Template ---
     st.subheader("2. Your template")
+    tpl_up = st.file_uploader(
+        "Upload your template (Word, PDF or text file)",
+        type=cl.TEMPLATE_TYPES, key="cl_tpl_file",
+    )
+    if tpl_up is not None and st.session_state.get("cl_tpl_seen") != tpl_up.file_id:
+        st.session_state["cl_tpl_seen"] = tpl_up.file_id
+        try:
+            new_tpl = cl.template_from_file(tpl_up.name, tpl_up.getvalue())
+            db.set_setting(conn, "cl_template", new_tpl)
+            st.session_state["cl_template_text"] = new_tpl
+            st.success(f"Loaded your template from {tpl_up.name}. You can edit it below.")
+        except ValueError as e:
+            st.error(str(e))
     saved_tpl = db.get_setting(conn, "cl_template", "") or _CL_EXAMPLE
     st.markdown(
         '<div class="cl-placeholders">'
@@ -1004,7 +1017,14 @@ with tab_cl:
         + "</div>",
         unsafe_allow_html=True,
     )
-    template = st.text_area("Template", value=saved_tpl, height=260, key="cl_template_text")
+    template = st.text_area("Template (or type / paste it here)", value=saved_tpl,
+                            height=260, key="cl_template_text")
+    if template.strip() and not cl.placeholders_in(template):
+        st.caption(
+            "This template has no {placeholders}. Write with AI will still follow its style. "
+            "For Fill my template, swap the parts that change per job for "
+            "{company}, {role} and so on."
+        )
     if template != db.get_setting(conn, "cl_template", ""):
         db.set_setting(conn, "cl_template", template)
 
