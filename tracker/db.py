@@ -663,3 +663,50 @@ def save_mac_link(conn, key, reminder_id, title, due, state="open") -> None:
 def set_mac_link_state(conn, key, state) -> None:
     conn.execute("UPDATE mac_links SET state=? WHERE key=?", (state, key))
     conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Backup and restore (the whole database as one file)
+# ---------------------------------------------------------------------------
+
+def backup_bytes(conn) -> bytes:
+    """Everything in the tracker as a single SQLite file."""
+    conn.commit()
+    return conn.serialize()
+
+
+def restore_from_bytes(conn, data: bytes, keep_copy_dir=None) -> str | None:
+    """Replace all data with a backup file's contents.
+
+    Checks the file is a tracker backup first. When ``keep_copy_dir`` is given,
+    the current data is saved there as ``tracker-before-restore-<time>.db``
+    and that path is returned.
+    """
+    if not data.startswith(b"SQLite format 3\x00"):
+        raise ValueError("That isn't a tracker backup file (.db).")
+    src = sqlite3.connect(":memory:")
+    try:
+        src.deserialize(data)
+        tables = {r[0] for r in src.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    except sqlite3.DatabaseError as e:
+        raise ValueError("That backup file is damaged.") from e
+    if "applications" not in tables:
+        raise ValueError("That file isn't a tracker backup (no applications table).")
+
+    saved = None
+    if keep_copy_dir is not None:
+        d = Path(keep_copy_dir)
+        d.mkdir(parents=True, exist_ok=True)
+        saved = str(d / f"tracker-before-restore-{_dt.datetime.now():%Y%m%d-%H%M%S}.db")
+        Path(saved).write_bytes(backup_bytes(conn))
+
+    conn.commit()
+    src.backup(conn)          # overwrite in place; the app's connection stays valid
+    src.close()
+    # An older backup may lack newer tables/columns.
+    for schema in (SCHEMA, _SETTINGS_SCHEMA, _STAGES_SCHEMA, _MATCH_SCORES_SCHEMA,
+                   _HISTORY_SCHEMA, _CONTACTS_SCHEMA, _NOTES_SCHEMA, _TASKS_SCHEMA,
+                   _MAC_LINKS_SCHEMA):
+        conn.execute(schema)
+    _migrate(conn)
+    return saved

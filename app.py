@@ -1,5 +1,6 @@
 """Internship Tracker & Dashboard Analyzer. Run: streamlit run app.py"""
 import datetime as dt
+from pathlib import Path
 import html as _html
 
 import pandas as pd
@@ -1276,6 +1277,34 @@ with tab_set:
     if new_stale != stale_now:
         db.set_setting(conn, "stale_days", str(new_stale))
         st.rerun()
+
+    st.subheader("Backup")
+    st.caption(
+        "One file with everything: jobs, stages, contacts, notes, to-dos, your saved "
+        "resume and template, and these settings. Keep it somewhere safe, like iCloud Drive."
+    )
+    st.download_button(
+        "Download backup", data=db.backup_bytes(conn),
+        file_name=f"internship-tracker-backup-{_today_str}.db",
+        mime="application/octet-stream", key="bk_dl",
+    )
+    with st.expander("Restore from a backup"):
+        bk = st.file_uploader("Backup file (.db)", type=["db"], key="bk_up")
+        sure = st.checkbox("Replace everything in the tracker with this backup", key="bk_sure")
+        if st.button("Restore", disabled=bk is None or not sure, key="bk_go"):
+            try:
+                kept = db.restore_from_bytes(conn, bk.getvalue(),
+                                             keep_copy_dir=db.DB_PATH.parent / "backups")
+                st.session_state["bk_msg"] = (
+                    "Restored. Your previous data was saved to "
+                    f"data/backups/{Path(kept).name}." if kept else "Restored.")
+                for k in ("mac_synced", "bk_sure"):
+                    st.session_state.pop(k, None)
+                st.rerun()
+            except ValueError as e:
+                st.error(str(e))
+        if st.session_state.get("bk_msg"):
+            st.success(st.session_state.pop("bk_msg"))
 
     st.subheader("Sample data")
     st.caption("Demo applications so a fresh copy has something to show. They are marked [sample].")

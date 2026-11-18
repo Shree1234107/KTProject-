@@ -41,3 +41,4 @@ uploads/
 
 # Tracker database - never commit
 data/*.db
+data/backups/

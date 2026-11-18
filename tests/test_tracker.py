@@ -794,3 +794,24 @@ def test_response_by_source_ranks_by_rate():
 def test_response_by_source_empty():
     df = pd.DataFrame({"id": [1], "status": ["Applied"], "date_applied": [pd.NaT], "source": [""]})
     assert analytics.response_by_source(df).empty
+
+
+def test_backup_and_restore_roundtrip(tmp_path):
+    import pytest
+    from tracker import db as _db
+    c = _db.connect(tmp_path / "a.db")
+    a = _db.add_application(c, "Acme", "Intern")
+    _db.add_note(c, a, "hello")
+    _db.set_setting(c, "cl_template", "Dear {company}")
+    snap = _db.backup_bytes(c)
+
+    _db.clear_all_data(c)
+    _db.add_application(c, "Other", "Job")
+    kept = _db.restore_from_bytes(c, snap, keep_copy_dir=tmp_path / "bk")
+    assert list(_db.load_applications(c)["company"]) == ["Acme"]
+    assert list(_db.load_notes(c)["body"]) == ["hello"]
+    assert _db.get_setting(c, "cl_template") == "Dear {company}"
+    assert (tmp_path / "bk").exists() and kept.endswith(".db")
+
+    with pytest.raises(ValueError):
+        _db.restore_from_bytes(c, b"not a database")
