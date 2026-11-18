@@ -205,6 +205,8 @@ def build_prompt(resume: str, job_description: str, template: str,
         "- Connect my real experience to what the JOB DESCRIPTION asks for.\n"
         "- If the job asks for a skill or tool that is NOT in MY RESUME, do not "
         "claim it, not even 'familiarity'. Leave it out.\n"
+        "- Don't state my class year (senior, junior...) or where I found the "
+        "posting. Don't add any fact that isn't in MY RESUME or the JOB DESCRIPTION.\n"
         f"- Address it to {fields['{hiring_manager}']} and date it {fields['{date}']}.\n"
         "- Output only the letter text. No notes, no markdown, no subject line "
         "unless my template has one.\n\n"
@@ -221,6 +223,37 @@ def _friendly(msg: str) -> str:
                 "Pick a smaller model, or close other apps and try again. "
                 f"(Ollama said: {msg})")
     return msg
+
+
+def _ollama_call(payload: dict, timeout: float) -> dict:
+    req = urllib.request.Request(f"{OLLAMA_URL}/api/generate",
+                                 data=json.dumps(payload).encode(),
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.load(r)
+
+
+def guess_company_role(model: str, job_description: str, timeout: float = 120) -> tuple[str, str]:
+    """Ask the model for the company and job title named in a posting.
+
+    Returns ("", "") for anything it can't find, so callers can fall back to
+    asking the user.
+    """
+    prompt = (
+        "From this job posting, return JSON with two keys: \"company\" (the hiring "
+        "company's name) and \"role\" (the job title). Use an empty string if the "
+        "posting doesn't say. Copy names exactly as written.\n\n"
+        f"POSTING:\n{job_description.strip()[:4000]}"
+    )
+    try:
+        data = _ollama_call({"model": model, "prompt": prompt, "stream": False,
+                             "think": False, "format": "json",
+                             "options": {"temperature": 0}}, timeout)
+        found = json.loads(data.get("response") or "{}")
+    except (urllib.error.URLError, OSError, ValueError):
+        return "", ""
+    clean = lambda v: re.sub(r"\s+", " ", str(v or "")).strip()[:80]
+    return clean(found.get("company")), clean(found.get("role"))
 
 
 _THINK = re.compile(r"<think>.*?</think>", re.S)

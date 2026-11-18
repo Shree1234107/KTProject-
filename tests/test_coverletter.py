@@ -123,3 +123,14 @@ def test_template_from_file_rejects_bad_input():
         cl.template_from_file("broken.docx", b"not a zip")
     with pytest.raises(ValueError, match="no text"):
         cl.template_from_file("empty.txt", b"   \n ")
+
+
+def test_guess_company_role_parses_json(monkeypatch):
+    reply = {"response": json.dumps({"company": " Acme  Corp ", "role": "Data Intern"})}
+    monkeypatch.setattr(cl.urllib.request, "urlopen", lambda *a, **k: _Resp(json.dumps(reply).encode()))
+    assert cl.guess_company_role("m", "posting") == ("Acme Corp", "Data Intern")
+
+
+def test_guess_company_role_blank_on_failure(monkeypatch):
+    monkeypatch.setattr(cl.urllib.request, "urlopen", lambda *a, **k: _Resp(b'{"response": "not json"}'))
+    assert cl.guess_company_role("m", "posting") == ("", "")

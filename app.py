@@ -1030,22 +1030,30 @@ with tab_cl:
 
     # --- 3. Job ---
     st.subheader("3. The job")
-    job_opts = [None] + (list(df["id"]) if not df.empty else [])
-    pick = st.selectbox(
-        "Fill in from a job in your tracker (optional)", job_opts,
-        format_func=lambda i: "—" if i is None else
-        f"{df.loc[df.id == i, 'company'].iloc[0]} — {df.loc[df.id == i, 'role'].iloc[0]}",
-        key="cl_pick",
-    )
+    jd = st.text_area("Job description", height=220, key="cl_jd",
+                      placeholder="Paste any job posting here. It doesn't need to be in your tracker.")
+    with st.expander("Or fill in from a job in your tracker"):
+        job_opts = [None] + (list(df["id"]) if not df.empty else [])
+        pick = st.selectbox(
+            "Job", job_opts,
+            format_func=lambda i: "—" if i is None else
+            f"{df.loc[df.id == i, 'company'].iloc[0]} — {df.loc[df.id == i, 'role'].iloc[0]}",
+            key="cl_pick",
+        )
     pick_row = df[df["id"] == pick].iloc[0] if pick is not None else None
+    guessed = st.session_state.get("cl_guess", {}) if pick is None else {}
     j1, j2, j3 = st.columns(3)
-    company = j1.text_input("Company", value="" if pick_row is None else pick_row["company"],
-                            key=f"cl_co_{pick}")
-    role = j2.text_input("Role", value="" if pick_row is None else pick_row["role"],
-                         key=f"cl_ro_{pick}")
+    company = j1.text_input(
+        "Company", key=f"cl_co_{pick}_{guessed.get('n', 0)}",
+        value=pick_row["company"] if pick_row is not None else guessed.get("company", ""),
+        placeholder="Found from the posting if blank",
+    )
+    role = j2.text_input(
+        "Role", key=f"cl_ro_{pick}_{guessed.get('n', 0)}",
+        value=pick_row["role"] if pick_row is not None else guessed.get("role", ""),
+        placeholder="Found from the posting if blank",
+    )
     manager = j3.text_input("Hiring manager (optional)", key=f"cl_hm_{pick}")
-    jd = st.text_area("Job description", height=200, key="cl_jd",
-                      placeholder="Paste the full job posting here.")
 
     # --- 4. Write ---
     st.subheader("4. Write the letter")
@@ -1071,24 +1079,48 @@ with tab_cl:
     elif not models:
         st.caption("To write with AI, install and open Ollama (free, ollama.com), then reload this page.")
 
-    missing = [n for n, v in [("company", company), ("role", role)] if not v.strip()]
-    if way.startswith("Write with AI"):
-        missing += [n for n, v in [("resume", resume_text), ("job description", jd)] if not v.strip()]
     if st.button("Write cover letter", type="primary", key="cl_go"):
+        use_ai = way.startswith("Write with AI")
+        # Company/role left blank: read them from the pasted posting.
+        if jd.strip() and not (company.strip() and role.strip()):
+            finder = model if use_ai else next((m["name"] for m in models if not m["cloud"]), None)
+            if finder:
+                with st.spinner("Finding the company and role in the posting…"):
+                    g_co, g_ro = cl.guess_company_role(finder, jd)
+                company = company.strip() or g_co
+                role = role.strip() or g_ro
+                if pick is None:
+                    st.session_state["cl_guess"] = {
+                        "company": company, "role": role,
+                        "n": st.session_state.get("cl_guess", {}).get("n", 0) + 1,
+                    }
+
+        missing = [n for n, v in [("job description", jd), ("company", company), ("role", role)]
+                   if not v.strip()]
+        if use_ai and not resume_text.strip():
+            missing.append("resume")
         if missing:
-            st.error("Add the " + ", ".join(missing) + " first.")
-        elif way.startswith("Write with AI"):
-            with st.spinner(f"Writing with {model}… this can take a minute or two."):
-                try:
-                    st.session_state["cl_draft"] = cl.generate_with_ollama(
-                        model, cl.build_prompt(resume_text, jd, template, company, role, manager))
-                except RuntimeError as e:
-                    st.error(f"Ollama couldn't write the letter: {e}")
+            st.error("Add the " + ", ".join(missing) + " first."
+                     + (" (I couldn't find it in the posting.)"
+                        if jd.strip() and ("company" in missing or "role" in missing) else ""))
         else:
-            skills = cl.shared_skills(resume_text, jd)
-            st.session_state["cl_draft"] = cl.fill_template(
-                template, cl.fields_for(company, role, manager, skills))
-        st.session_state["cl_for"] = (company, role)
+            ok = True
+            if use_ai:
+                with st.spinner(f"Writing with {model}… this can take a minute or two."):
+                    try:
+                        st.session_state["cl_draft"] = cl.generate_with_ollama(
+                            model, cl.build_prompt(resume_text, jd, template, company, role, manager))
+                    except RuntimeError as e:
+                        st.error(f"Ollama couldn't write the letter: {e}")
+                        ok = False
+            else:
+                skills = cl.shared_skills(resume_text, jd)
+                st.session_state["cl_draft"] = cl.fill_template(
+                    template, cl.fields_for(company, role, manager, skills))
+            if ok:
+                st.session_state["cl_for"] = (company, role)
+                st.session_state.pop("cl_edit", None)  # show the new draft, not the old edit
+                st.rerun()
 
     # --- 5. Edit + download ---
     if st.session_state.get("cl_draft"):
