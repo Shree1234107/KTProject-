@@ -166,6 +166,98 @@ def placeholders_in(template: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Template structure: header / greeting / body / sign-off
+# ---------------------------------------------------------------------------
+
+_GREETING = re.compile(r"^\s*(dear|to whom|hello|hi|greetings)\b", re.I)
+_CLOSING = re.compile(
+    r"^\s*(sincerely|best|kind regards|warm regards|regards|respectfully|"
+    r"thank you|thanks|yours truly|yours sincerely|cordially|with gratitude)\b.{0,20}$",
+    re.I,
+)
+# Parenthetical notes to the writer, e.g. "(remove if job is outside CO)".
+# Phone area codes like "(303)" are left alone.
+_NOTE = re.compile(r"\s*\((?=[^)]*[A-Za-z]{3})[^)]*\)")
+
+
+def strip_notes(line: str) -> str:
+    return re.sub(r"[ \t]{2,}", "  ", _NOTE.sub("", line)).rstrip()
+
+
+def split_template(template: str) -> dict | None:
+    """Split a template into header lines, greeting, body and sign-off lines.
+
+    Returns None when there is no greeting ("Dear ...") or no sign-off
+    ("Sincerely," ...) to anchor on.
+    """
+    lines = template.strip().split("\n")
+    g = next((i for i, ln in enumerate(lines) if _GREETING.match(ln)), None)
+    if g is None:
+        return None
+    c = next((i for i in range(len(lines) - 1, g, -1) if _CLOSING.match(lines[i])), None)
+    if c is None:
+        return None
+    body = "\n".join(lines[g + 1:c]).strip()
+    paragraphs = [b for b in re.split(r"\n\s*\n", body) if b.strip()]
+    return {
+        "header": [ln for ln in lines[:g] if ln.strip()],
+        "greeting": lines[g],
+        "body": body,
+        "paragraphs": max(2, min(5, len(paragraphs))),
+        "closing": lines[c:],
+    }
+
+
+def greeting_line(template_greeting: str, hiring_manager: str = "") -> str:
+    if hiring_manager.strip():
+        return f"Dear {hiring_manager.strip()},"
+    text = strip_notes(template_greeting).strip().rstrip(",:")
+    word, _, rest = text.partition(" ")
+    rest = rest.split("/")[0].strip() or "Hiring Manager"   # "Hiring Manager/Committee"
+    return f"{word} {rest},"
+
+
+def _resume_name(resume: str) -> str:
+    first = next((ln.strip() for ln in resume.split("\n") if ln.strip()), "")
+    return first if 1 < len(first.split()) <= 5 else ""
+
+
+_EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+_PHONE = re.compile(r"(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}")
+_LINKEDIN = re.compile(r"(?:https?://)?(?:www\.)?linkedin\.com/in/[\w-]+/?", re.I)
+
+
+def use_real_contacts(lines: list[str], resume: str) -> list[str]:
+    """Replace any email, phone or LinkedIn URL in the lines with the resume's own."""
+    real = {}
+    for key, rx in (("email", _EMAIL), ("phone", _PHONE), ("linkedin", _LINKEDIN)):
+        m = rx.search(resume)
+        if m:
+            real[key] = m.group(0)
+    out = []
+    for ln in lines:
+        if "linkedin" in real:
+            ln = _LINKEDIN.sub(real["linkedin"], ln)
+        if "email" in real:
+            ln = _EMAIL.sub(real["email"], ln)
+        if "phone" in real:
+            ln = _PHONE.sub(real["phone"], ln)
+        out.append(ln)
+    return out
+
+
+def _assemble(header: list[str], greeting: str, paragraphs: list[str],
+              closing: list[str]) -> str:
+    parts = []
+    if header:
+        parts.append("\n".join(header))
+    parts.append(greeting)
+    parts.extend(p.strip() for p in paragraphs if p.strip())
+    out = "\n\n".join(parts) + "\n\n" + "\n".join(closing).strip()
+    return re.sub(r"\n{3,}", "\n\n", out).strip()
+
+
+# ---------------------------------------------------------------------------
 # Ollama (local AI)
 # ---------------------------------------------------------------------------
 
@@ -256,6 +348,82 @@ def guess_company_role(model: str, job_description: str, timeout: float = 120) -
     return clean(found.get("company")), clean(found.get("role"))
 
 
+def _fill_lines_with_ai(model: str, lines: list[str], resume: str) -> list[str]:
+    """Swap sample details in header/sign-off lines for the real ones from the resume."""
+    if not lines:
+        return []
+    prompt = (
+        "These lines are from a cover letter template. Replace every sample or "
+        "placeholder detail (name, city, email, phone, LinkedIn URL, degree, "
+        "major, class year, blanks like ____) with my real details from MY RESUME. "
+        "A line that is a document title such as 'X COVER LETTER TEMPLATE' "
+        "becomes my full name. Remove notes in parentheses. Keep the same order "
+        "and separators. If my resume doesn't have a detail, drop that piece.\n"
+        'Return JSON: {"lines": [one string per input line, same count]}\n\n'
+        f"LINES:\n{json.dumps(lines)}\n\nMY RESUME:\n{resume.strip()[:4000]}"
+    )
+    try:
+        raw = generate_with_ollama(model, prompt, json_mode=True, temperature=0, timeout=180)
+        out = json.loads(raw).get("lines", [])
+    except (RuntimeError, ValueError, AttributeError):
+        out = []
+    if not isinstance(out, list) or len(out) != len(lines):
+        out = lines
+    name = _resume_name(resume)
+    fixed = []
+    for orig, new in zip(lines, out):
+        new = strip_notes(str(new))
+        if re.search(r"\btemplate\b", new, re.I) or re.search(r"\btemplate\b", orig, re.I) and not new.strip():
+            new = name
+        fixed.append(new)
+    return use_real_contacts(fixed, resume)
+
+
+def write_letter_from_template(model: str, resume: str, job_description: str,
+                               template: str, company: str, role: str,
+                               hiring_manager: str = "") -> str:
+    """AI letter that keeps the template's header, greeting and sign-off.
+
+    The model writes only the body paragraphs (as many as the template has);
+    the header and sign-off lines are the template's own, filled in with the
+    resume's details. Falls back to a whole-letter prompt when the template
+    has no greeting/sign-off to anchor on.
+    """
+    parts = split_template(fill_template(template, fields_for(company, role, hiring_manager)))
+    if parts is None:
+        return generate_with_ollama(model, build_prompt(
+            resume, job_description, template, company, role, hiring_manager))
+
+    n = parts["paragraphs"]
+    body_prompt = (
+        f"Write the body of my cover letter for the {role} position at {company}: "
+        f"exactly {n} paragraphs, separated by one blank line, about "
+        f"{60 * n + 120} words in total.\n\n"
+        "Rules:\n"
+        "- Follow the guidance or mirror the sample in TEMPLATE BODY, paragraph by "
+        "paragraph. Do not copy its instructions or brackets into the letter.\n"
+        "- Only use experience that is in MY RESUME. Never invent jobs, numbers, "
+        "courses or skills. If the job wants a skill I don't have, leave it out.\n"
+        "- Don't describe my class year with a word like 'senior' or 'junior'. You "
+        "may give my expected graduation date exactly as my resume states it.\n"
+        "- Don't say where I found the posting.\n"
+        "- No greeting, no sign-off, no name, no headings, no markdown. Only the "
+        f"{n} paragraphs.\n\n"
+        f"TEMPLATE BODY:\n{parts['body'][:4000]}\n\n"
+        f"MY RESUME:\n{resume.strip()[:5000]}\n\n"
+        f"JOB DESCRIPTION:\n{job_description.strip()[:5000]}\n"
+    )
+    body = generate_with_ollama(model, body_prompt)
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
+    paragraphs = [p for p in paragraphs
+                  if not _GREETING.match(p) and not _CLOSING.match(p.split("\n")[0])]
+
+    header = [ln for ln in _fill_lines_with_ai(model, parts["header"], resume) if ln.strip()]
+    closing = _fill_lines_with_ai(model, parts["closing"], resume)
+    return _assemble(header, greeting_line(parts["greeting"], hiring_manager),
+                     paragraphs, closing)
+
+
 _THINK = re.compile(r"<think>.*?</think>", re.S)
 
 
@@ -265,12 +433,16 @@ def clean_model_output(text: str) -> str:
     return text.strip()
 
 
-def generate_with_ollama(model: str, prompt: str, timeout: float = 600) -> str:
-    """Ask Ollama for a letter. Raises RuntimeError with a readable message."""
-    body = json.dumps({
+def generate_with_ollama(model: str, prompt: str, timeout: float = 600,
+                         json_mode: bool = False, temperature: float = 0.6) -> str:
+    """Ask Ollama for text. Raises RuntimeError with a readable message."""
+    payload = {
         "model": model, "prompt": prompt, "stream": False, "think": False,
-        "options": {"temperature": 0.6},
-    }).encode()
+        "options": {"temperature": temperature},
+    }
+    if json_mode:
+        payload["format"] = "json"
+    body = json.dumps(payload).encode()
     req = urllib.request.Request(f"{OLLAMA_URL}/api/generate", data=body,
                                  headers={"Content-Type": "application/json"})
     try:
@@ -286,6 +458,8 @@ def generate_with_ollama(model: str, prompt: str, timeout: float = 600) -> str:
         raise RuntimeError("Couldn't reach Ollama. Is the Ollama app open?") from e
     if data.get("error"):
         raise RuntimeError(_friendly(data["error"]))
+    if json_mode:
+        return data.get("response", "")
     text = clean_model_output(data.get("response", ""))
     if not text:
         raise RuntimeError("The model returned an empty letter. Try again.")
@@ -310,18 +484,42 @@ def _latin1(text: str) -> str:
 
 
 def to_pdf(text: str, title: str = "Cover letter") -> bytes:
-    """A plain, one-column US Letter PDF of the letter text."""
+    """A US Letter PDF of the letter, laid out like the text.
+
+    Lines keep their breaks and blank lines. Text is left-aligned (not
+    justified, so no stretched gaps between words). If the letter has a
+    header above the greeting (name, contact line), it is centered and the
+    first line is bold, like a letterhead.
+    """
+    lines = _latin1(text.strip()).split("\n")
+    g = next((i for i, ln in enumerate(lines) if _GREETING.match(ln)), None)
+    header_n = 0
+    if g is not None:
+        header_n = len([ln for ln in lines[:g] if ln.strip()])
+        if header_n > 4:
+            header_n = 0
+
     pdf = FPDF(format="Letter", unit="pt")
     pdf.set_title(_latin1(title))
-    pdf.set_margins(72, 72, 72)
-    pdf.set_auto_page_break(True, margin=72)
+    pdf.set_margins(72, 66, 72)
+    pdf.set_auto_page_break(True, margin=66)
     pdf.add_page()
-    pdf.set_font("Times", size=11.5)
-    for para in _latin1(text.strip()).split("\n"):
-        if para.strip():
-            pdf.multi_cell(0, 16, para.rstrip(), new_x="LMARGIN", new_y="NEXT")
-        else:
-            pdf.ln(10)
+    seen_header = 0
+    for ln in lines:
+        if not ln.strip():
+            pdf.ln(9)
+            continue
+        if seen_header < header_n:
+            first = seen_header == 0
+            pdf.set_font("Times", style="B" if first else "", size=15 if first else 10.5)
+            pdf.multi_cell(0, 18 if first else 13, ln.strip(), align="C",
+                           new_x="LMARGIN", new_y="NEXT")
+            seen_header += 1
+            if seen_header == header_n:
+                pdf.ln(6)
+            continue
+        pdf.set_font("Times", size=11.5)
+        pdf.multi_cell(0, 14.5, ln.rstrip(), align="L", new_x="LMARGIN", new_y="NEXT")
     return bytes(pdf.output())
 
 

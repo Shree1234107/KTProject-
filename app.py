@@ -1108,8 +1108,8 @@ with tab_cl:
             if use_ai:
                 with st.spinner(f"Writing with {model}… this can take a minute or two."):
                     try:
-                        st.session_state["cl_draft"] = cl.generate_with_ollama(
-                            model, cl.build_prompt(resume_text, jd, template, company, role, manager))
+                        st.session_state["cl_draft"] = cl.write_letter_from_template(
+                            model, resume_text, jd, template, company, role, manager)
                     except RuntimeError as e:
                         st.error(f"Ollama couldn't write the letter: {e}")
                         ok = False
