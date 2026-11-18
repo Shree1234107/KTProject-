@@ -206,3 +206,27 @@ def build_ics(
 
     lines.append("END:VCALENDAR")
     return _CRLF.join(lines) + _CRLF
+
+
+def event_ics(uid: str, summary: str, day, time_str: str | None = None,
+              minutes: int = 60, description: str = "") -> str:
+    """One calendar event. With a time it's a timed (local, floating) event; else all-day."""
+    d = pd.Timestamp(day).date()
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0",
+             "PRODID:-//KTProject//Internship Tracker//EN", "CALSCALE:GREGORIAN",
+             "BEGIN:VEVENT", _fold(f"UID:{_escape(uid)}"), f"DTSTAMP:{_dtstamp()}"]
+    if time_str:
+        hh, mm = str(time_str)[:5].split(":")
+        start = _dt.datetime.combine(d, _dt.time(int(hh), int(mm)))
+        end = start + _dt.timedelta(minutes=minutes)
+        lines += [f"DTSTART:{start:%Y%m%dT%H%M%S}", f"DTEND:{end:%Y%m%dT%H%M%S}",
+                  "BEGIN:VALARM", "TRIGGER:-PT30M", "ACTION:DISPLAY",
+                  _fold(f"DESCRIPTION:{_escape(summary)}"), "END:VALARM"]
+    else:
+        lines += [f"DTSTART;VALUE=DATE:{_fmt_date(d)}",
+                  f"DTEND;VALUE=DATE:{_fmt_date(d + _dt.timedelta(days=1))}"]
+    lines.append(_fold(f"SUMMARY:{_escape(summary)}"))
+    if description:
+        lines.append(_fold(f"DESCRIPTION:{_escape(description)}"))
+    lines += ["END:VEVENT", "END:VCALENDAR"]
+    return _CRLF.join(lines) + _CRLF

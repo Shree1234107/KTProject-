@@ -137,6 +137,7 @@ _MIGRATIONS = [
     ("referral_contact", "ALTER TABLE applications ADD COLUMN referral_contact TEXT DEFAULT ''"),
     ("follow_up_date",   "ALTER TABLE applications ADD COLUMN follow_up_date TEXT"),
     ("is_sample",        "ALTER TABLE applications ADD COLUMN is_sample INTEGER NOT NULL DEFAULT 0"),
+    ("stage_time",       "ALTER TABLE stages ADD COLUMN stage_time TEXT"),
 ]
 
 
@@ -264,7 +265,7 @@ def load_applications(conn):
 # ---------------------------------------------------------------------------
 
 def add_stage(conn, application_id, stage, stage_date=None, outcome="Scheduled",
-              notes="", is_sample=False):
+              notes="", is_sample=False, stage_time=None):
     """Insert an interview stage. Returns the new stage id."""
     row = conn.execute("SELECT id FROM applications WHERE id=?", (application_id,)).fetchone()
     if not row:
@@ -274,12 +275,13 @@ def add_stage(conn, application_id, stage, stage_date=None, outcome="Scheduled",
     if outcome not in STAGE_OUTCOMES:
         raise ValueError(f"Invalid outcome: {outcome}")
     cur = conn.execute(
-        "INSERT INTO stages (application_id, stage, stage_date, outcome, notes, is_sample) "
-        "VALUES (?,?,?,?,?,?)",
+        "INSERT INTO stages (application_id, stage, stage_date, outcome, notes, is_sample, stage_time) "
+        "VALUES (?,?,?,?,?,?,?)",
         (application_id,
          stage,
          str(stage_date) if stage_date else None,
-         outcome, notes, 1 if is_sample else 0),
+         outcome, notes, 1 if is_sample else 0,
+         str(stage_time)[:5] if stage_time else None),
     )
     conn.commit()
     return cur.lastrowid
@@ -287,7 +289,7 @@ def add_stage(conn, application_id, stage, stage_date=None, outcome="Scheduled",
 
 def update_stage(conn, stage_id, **fields):
     """Update one or more fields of a stage row."""
-    allowed = {"stage", "stage_date", "outcome", "notes"}
+    allowed = {"stage", "stage_date", "outcome", "notes", "stage_time"}
     bad = set(fields) - allowed
     if bad:
         raise ValueError(f"Unknown stage fields: {bad}")

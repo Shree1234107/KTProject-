@@ -208,6 +208,10 @@ def _html_table(
     )
 
 
+def _fmt_time(hhmm: str) -> str:
+    return dt.datetime.strptime(str(hhmm)[:5], "%H:%M").strftime("%-I:%M %p")
+
+
 def _stage_timeline_html(app_stages: pd.DataFrame) -> str:
     """Build the interview stages timeline HTML for a single application."""
     items: list[str] = []
@@ -785,9 +789,23 @@ with tab_apps:
             for stage_row in app_stages.itertuples():
                 sc1, sc2, sc3, sc4 = st.columns([4, 1, 1, 1])
                 s_label = str(stage_row.stage)
+                s_time = getattr(stage_row, "stage_time", None)
+                s_time = s_time if isinstance(s_time, str) and s_time else None
                 if pd.notna(stage_row.stage_date):
                     s_label += f" — {str(stage_row.stage_date)[:10]}"
+                    if s_time:
+                        s_label += f" at {_fmt_time(s_time)}"
                 sc1.caption(s_label)
+                if pd.notna(stage_row.stage_date) and stage_row.outcome == "Scheduled":
+                    sc1.download_button(
+                        "📅 Add to calendar",
+                        _ics.event_ics(
+                            f"stage-{stage_row.id}@ktproject",
+                            f"{stage_row.stage}: {cur['company']} — {cur['role']}",
+                            stage_row.stage_date, s_time,
+                            description=str(stage_row.notes or "")),
+                        file_name=f"interview-{stage_row.id}.ics", mime="text/calendar",
+                        key=f"sics_{stage_row.id}")
                 if stage_row.outcome != "Passed":
                     if sc2.button("Pass", key=f"sp_{stage_row.id}"):
                         db.update_stage(conn, int(stage_row.id), outcome="Passed")
@@ -807,9 +825,13 @@ with tab_apps:
                 new_stage_date    = sg2.date_input("Date", dt.date.today(),         key=f"sdate_{choice}")
                 new_stage_outcome = sg1.selectbox("Outcome", db.STAGE_OUTCOMES,    key=f"sout_{choice}")
                 new_stage_notes   = sg2.text_input("Notes", "",                     key=f"snotes_{choice}")
+                has_time = sg1.checkbox("Set a time", key=f"shas_{choice}")
+                new_stage_time = sg2.time_input("Time", dt.time(10, 0), step=900, key=f"stime_{choice}")
                 if st.form_submit_button("Add stage"):
                     db.add_stage(conn, int(choice), new_stage_type, str(new_stage_date),
-                                 new_stage_outcome, new_stage_notes)
+                                 new_stage_outcome, new_stage_notes,
+                                 stage_time=new_stage_time.strftime("%H:%M") if has_time else None)
+                    st.session_state["mac_dirty"] = True
                     st.rerun()
 
         # --- Resume match history ---
