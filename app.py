@@ -606,13 +606,9 @@ with tab_dash:
             ]
             st.markdown(
                 _html_table(
-                    ["Source", "Applications", "Advanced to interview"],
+                    ["Source", "Applications", "Moved forward"],
                     src_rows,
                     numeric_cols={1, 2},
-                    caption=(
-                        '"Advanced to interview" = applications that reached '
-                        "OA/Screen, Interview, or Offer."
-                    ),
                 ),
                 unsafe_allow_html=True,
             )

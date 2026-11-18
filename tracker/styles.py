@@ -1909,6 +1909,9 @@ button[data-testid^="stBaseButton"],
 .detail-row { font-size: 0.85rem; line-height: 1.4; padding: 3px 0; overflow-wrap: anywhere; }
 .detail-sub { font-size: 0.75rem; color: var(--text-secondary); }
 [data-testid="stPopoverBody"] { min-width: 300px; max-width: 380px; }
+
+/* Hide Streamlit's "Press Enter to submit form" hints */
+[data-testid="InputInstructions"] { display: none !important; }
 """
 
 
