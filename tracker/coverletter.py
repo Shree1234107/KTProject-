@@ -526,3 +526,140 @@ def to_pdf(text: str, title: str = "Cover letter") -> bytes:
 def file_name(company: str, role: str) -> str:
     slug = "_".join(re.sub(r"[^A-Za-z0-9]+", "", w) for w in f"{company} {role}".split())
     return f"Cover_Letter_{slug or 'Job'}.pdf"
+
+
+# ---------------------------------------------------------------------------
+# Word (.docx) output
+# ---------------------------------------------------------------------------
+
+def _parts(lines: list[str]) -> list[str]:
+    """Label each line: header / greeting / body / closing / sign (after closing) / blank."""
+    g = next((i for i, ln in enumerate(lines) if _GREETING.match(ln)), None)
+    c = next((i for i, ln in enumerate(lines) if _CLOSING.match(ln)
+              and (g is None or i > g)), None)
+    out = []
+    for i, ln in enumerate(lines):
+        if not ln.strip():
+            out.append("blank")
+        elif g is not None and i < g:
+            out.append("header")
+        elif i == g:
+            out.append("greeting")
+        elif i == c:
+            out.append("closing")
+        elif c is not None and i > c:
+            out.append("sign")
+        else:
+            out.append("body")
+    return out
+
+
+def _plain_docx(lines: list[str]):
+    from docx import Document
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Pt, Inches
+
+    doc = Document()
+    for s in doc.sections:
+        s.left_margin = s.right_margin = Inches(1)
+        s.top_margin = s.bottom_margin = Inches(0.9)
+    normal = doc.styles["Normal"]
+    normal.font.name = "Times New Roman"
+    normal.font.size = Pt(11.5)
+    normal.paragraph_format.space_after = Pt(0)
+    labels = _parts(lines)
+    header_n = labels.count("header")
+    seen = 0
+    for ln, lab in zip(lines, labels):
+        p = doc.add_paragraph()
+        if lab == "blank":
+            continue
+        run = p.add_run(ln.strip() if lab == "header" else ln.rstrip())
+        if lab == "header" and header_n <= 4:
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            if seen == 0:
+                run.bold = True
+                run.font.size = Pt(15)
+            else:
+                run.font.size = Pt(10.5)
+            seen += 1
+    return doc
+
+
+def _styled_docx(lines: list[str], template_docx: bytes):
+    """Rebuild the letter inside the user's own Word template, copying the
+    paragraph and font formatting of the matching template part."""
+    import copy
+    from docx import Document
+    from docx.oxml.ns import qn
+
+    doc = Document(io.BytesIO(template_docx))
+    tpl = [p for p in doc.paragraphs]
+    tlines = [p.text for p in tpl]
+    tlabels = _parts(tlines)
+    if "greeting" not in tlabels:
+        raise ValueError("no greeting in template")
+    samples: dict[str, list] = {}
+    for p, lab in zip(tpl, tlabels):
+        samples.setdefault(lab, []).append(p)
+    has_blank_paras = "blank" in samples
+
+    def fmt(p):
+        ppr = p._p.pPr
+        r = next((r for r in p.runs if r.text.strip()), p.runs[0] if p.runs else None)
+        rpr = r._r.rPr if r is not None else None
+        return (copy.deepcopy(ppr) if ppr is not None else None,
+                copy.deepcopy(rpr) if rpr is not None else None)
+
+    body = doc.element.body
+    for el in list(body):
+        if el.tag != qn("w:sectPr"):
+            body.remove(el)
+    sect = body.find(qn("w:sectPr"))
+
+    labels = _parts(lines)
+    counters: dict[str, int] = {}
+    for ln, lab in zip(lines, labels):
+        if lab == "blank" and not has_blank_paras:
+            continue  # template spaces paragraphs itself
+        pool = samples.get(lab) or samples.get("body") or tpl
+        i = counters.get(lab, 0)
+        counters[lab] = i + 1
+        src = pool[min(i, len(pool) - 1)]
+        ppr, rpr = fmt(src)
+        new_p = copy.deepcopy(src._p)
+        for child in list(new_p):
+            new_p.remove(child)
+        if ppr is not None:
+            new_p.append(ppr)
+        if lab != "blank":
+            r = new_p.makeelement(qn("w:r"), {})
+            if rpr is not None:
+                r.append(rpr)
+            t = r.makeelement(qn("w:t"), {})
+            t.text = ln.strip() if lab == "header" else ln.rstrip()
+            t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+            r.append(t)
+            new_p.append(r)
+        if sect is not None:
+            sect.addprevious(new_p)
+        else:
+            body.append(new_p)
+    return doc
+
+
+def to_docx(text: str, template_docx: bytes | None = None) -> bytes:
+    """A Word file of the letter. With the user's .docx template, it keeps that
+    file's fonts, sizes, alignment, spacing and page margins."""
+    lines = text.strip().split("\n")
+    doc = None
+    if template_docx:
+        try:
+            doc = _styled_docx(lines, template_docx)
+        except Exception:  # odd template: fall back to the plain layout
+            doc = None
+    if doc is None:
+        doc = _plain_docx(lines)
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()

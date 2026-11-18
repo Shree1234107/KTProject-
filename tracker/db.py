@@ -130,6 +130,15 @@ CREATE TABLE IF NOT EXISTS resumes (
 )
 """
 
+_LETTERS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS letters (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id INTEGER NOT NULL,
+    created_on     TEXT NOT NULL,
+    body           TEXT NOT NULL
+)
+"""
+
 # One row per item mirrored into the Mac Reminders app.
 _MAC_LINKS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS mac_links (
@@ -175,6 +184,7 @@ def connect(path=None):
     conn.execute(_TASKS_SCHEMA)
     conn.execute(_MAC_LINKS_SCHEMA)
     conn.execute(_RESUMES_SCHEMA)
+    conn.execute(_LETTERS_SCHEMA)
     _migrate(conn)
     return conn
 
@@ -256,6 +266,7 @@ def delete_application(conn, app_id):
     conn.execute("DELETE FROM tasks WHERE application_id=?", (app_id,))
     conn.execute("DELETE FROM contacts WHERE application_id=?", (app_id,))
     conn.execute("DELETE FROM notes WHERE application_id=?", (app_id,))
+    conn.execute("DELETE FROM letters WHERE application_id=?", (app_id,))
     conn.execute("DELETE FROM status_history WHERE application_id=?", (app_id,))
     conn.execute("DELETE FROM stages WHERE application_id=?", (app_id,))
     conn.execute("DELETE FROM match_scores WHERE application_id=?", (app_id,))
@@ -517,6 +528,7 @@ def clear_all_data(conn) -> None:
     conn.execute("DELETE FROM tasks")
     conn.execute("DELETE FROM contacts")
     conn.execute("DELETE FROM notes")
+    conn.execute("DELETE FROM letters")
     conn.execute("DELETE FROM match_scores")
     conn.execute("DELETE FROM applications")
     conn.commit()
@@ -719,7 +731,7 @@ def restore_from_bytes(conn, data: bytes, keep_copy_dir=None) -> str | None:
     # An older backup may lack newer tables/columns.
     for schema in (SCHEMA, _SETTINGS_SCHEMA, _STAGES_SCHEMA, _MATCH_SCORES_SCHEMA,
                    _HISTORY_SCHEMA, _CONTACTS_SCHEMA, _NOTES_SCHEMA, _TASKS_SCHEMA,
-                   _MAC_LINKS_SCHEMA, _RESUMES_SCHEMA):
+                   _MAC_LINKS_SCHEMA, _RESUMES_SCHEMA, _LETTERS_SCHEMA):
         conn.execute(schema)
     _migrate(conn)
     return saved
@@ -767,3 +779,25 @@ def app_resumes(conn):
     """{application_id: resume_id} for jobs with a resume picked."""
     rows = conn.execute("SELECT id, resume_id FROM applications WHERE resume_id IS NOT NULL")
     return {r[0]: r[1] for r in rows}
+
+
+# ---------------------------------------------------------------------------
+# Saved cover letters
+# ---------------------------------------------------------------------------
+
+def save_letter(conn, application_id, body):
+    if not conn.execute("SELECT 1 FROM applications WHERE id=?", (application_id,)).fetchone():
+        raise ValueError(f"Application {application_id} not found")
+    cur = conn.execute("INSERT INTO letters (application_id, created_on, body) VALUES (?,?,?)",
+                       (int(application_id), _dt.date.today().isoformat(), body))
+    conn.commit()
+    return cur.lastrowid
+
+
+def delete_letter(conn, letter_id):
+    conn.execute("DELETE FROM letters WHERE id=?", (int(letter_id),))
+    conn.commit()
+
+
+def load_letters(conn):
+    return pd.read_sql_query("SELECT * FROM letters ORDER BY created_on DESC, id DESC", conn)

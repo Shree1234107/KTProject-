@@ -1,6 +1,7 @@
 """Internship Tracker & Dashboard Analyzer. Run: streamlit run app.py"""
 import datetime as dt
 from pathlib import Path
+import base64
 import html as _html
 
 import pandas as pd
@@ -50,6 +51,7 @@ stages_df    = db.load_stages(conn)
 _history_df  = db.load_status_history(conn)
 _contacts_df = db.load_contacts(conn)
 _resumes_df = db.load_resumes(conn)
+_letters_df = db.load_letters(conn)
 _app_resumes = db.app_resumes(conn)
 _notes_df    = db.load_notes(conn)
 all_scores_df = db.load_match_scores(conn)
@@ -458,6 +460,20 @@ def _details_panel(row, prefix: str) -> None:
         )
     elif notes.empty:
         st.caption("No notes yet.")
+
+    # --- Cover letters ---
+    letters = _letters_df[_letters_df["application_id"] == aid] if not _letters_df.empty else _letters_df
+    if not letters.empty:
+        st.markdown('<div class="detail-head">Cover letters</div>', unsafe_allow_html=True)
+        for lt in letters.itertuples():
+            a, b, c = st.columns([3, 2, 1], vertical_alignment="center")
+            a.caption(f"Saved {_fmt_d(pd.Timestamp(lt.created_on))}")
+            b.download_button("PDF", cl.to_pdf(lt.body), key=f"{prefix}_lpdf_{lt.id}",
+                              file_name=cl.file_name(str(row.company), str(row.role)),
+                              mime="application/pdf", type="tertiary")
+            if c.button("✕", key=f"{prefix}_dell_{lt.id}", help="Delete letter", type="tertiary"):
+                db.delete_letter(conn, int(lt.id))
+                st.rerun()
 
     # --- Contacts ---
     st.markdown('<div class="detail-head">Contacts</div>', unsafe_allow_html=True)
@@ -1181,6 +1197,9 @@ with tab_cl:
         try:
             new_tpl = cl.template_from_file(tpl_up.name, tpl_up.getvalue())
             db.set_setting(conn, "cl_template", new_tpl)
+            db.set_setting(conn, "cl_template_docx",
+                           base64.b64encode(tpl_up.getvalue()).decode()
+                           if tpl_up.name.lower().endswith(".docx") else "")
             st.session_state["cl_template_text"] = new_tpl
             st.success(f"Loaded your template from {tpl_up.name}. You can edit it below.")
         except ValueError as e:
@@ -1319,13 +1338,44 @@ with tab_cl:
                 + " on your resume. Remove it or add it to your resume if it's true."
             )
         co, ro = st.session_state.get("cl_for", (company, role))
-        st.download_button(
+        _tpl_docx = db.get_setting(conn, "cl_template_docx", "")
+        d1, d2, d3 = st.columns(3)
+        d1.download_button(
             "Download PDF",
             data=cl.to_pdf(draft, title=f"Cover letter — {co}"),
             file_name=cl.file_name(co, ro),
             mime="application/pdf",
-            key="cl_dl",
+            key="cl_dl", width="stretch",
         )
+        d2.download_button(
+            "Download Word",
+            data=cl.to_docx(draft, base64.b64decode(_tpl_docx) if _tpl_docx else None),
+            file_name=cl.file_name(co, ro).replace(".pdf", ".docx"),
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            key="cl_dlw", width="stretch",
+            help="Uses your Word template's fonts and layout" if _tpl_docx else None,
+        )
+        # Save to a job in the tracker (adding it first if it's new).
+        match = pd.DataFrame()
+        if pick is not None:
+            match = df[df["id"] == pick]
+        elif not df.empty and co:
+            match = df[(df["company"].str.strip().str.lower() == str(co).strip().lower())
+                       & (df["role"].str.strip().str.lower() == str(ro).strip().lower())]
+        if not match.empty:
+            if d3.button("Save to this job", key="cl_save", width="stretch"):
+                db.save_letter(conn, int(match.iloc[0]["id"]), draft)
+                st.toast(f"Saved to {co} — {ro}. Find it under Contacts & notes.")
+                st.rerun()
+        elif co and ro:
+            if d3.button("Add job to tracker + save", key="cl_add", width="stretch",
+                         help="Adds it to your Wishlist with the posting as a note"):
+                new_id = db.add_application(conn, co, ro, status="Wishlist", date_applied=None)
+                if jd.strip():
+                    db.add_note(conn, new_id, "Job posting:\n" + jd.strip())
+                db.save_letter(conn, new_id, draft)
+                st.toast(f"Added {co} — {ro} to your Wishlist and saved the letter.")
+                st.rerun()
 
 # ---------------------------------------------------------------------------
 # Settings — weekly target, sample data, clear all
