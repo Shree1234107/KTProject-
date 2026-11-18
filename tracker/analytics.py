@@ -482,3 +482,26 @@ def latest_match_scores(scores_df: pd.DataFrame) -> pd.DataFrame:
         .drop_duplicates(subset=["application_id"])
         .reset_index(drop=True)
     )
+
+
+RESPONSE_STATUSES = {"OA/Screen", "Interview", "Offer", "Rejected"}
+
+
+def first_response_days(apps: pd.DataFrame, history: pd.DataFrame) -> pd.DataFrame:
+    """Days from applying to the first reply (a screen, interview, offer or rejection).
+
+    Returns columns id, source, days — one row per job that has heard back.
+    """
+    cols = ["id", "source", "days"]
+    if apps.empty or history.empty:
+        return pd.DataFrame(columns=cols)
+    h = history[history["status"].isin(RESPONSE_STATUSES)].copy()
+    h["on"] = pd.to_datetime(h["changed_on"], errors="coerce")
+    first = h.dropna(subset=["on"]).groupby("application_id")["on"].min()
+    a = apps.dropna(subset=["date_applied"]).copy()
+    a["applied"] = pd.to_datetime(a["date_applied"], errors="coerce")
+    a = a[a["id"].isin(first.index)]
+    a["days"] = (a["id"].map(first) - a["applied"]).dt.days
+    a = a[a["days"] >= 0]
+    a["source"] = a["source"].fillna("").replace("", "No source")
+    return a[cols].reset_index(drop=True)

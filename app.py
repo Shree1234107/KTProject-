@@ -362,7 +362,8 @@ def _board_card_html(row, today_d: dt.date, match_score: float | None = None,
     days = analytics.days_in_stage(timeline, today_d)
     stale = analytics.is_stale(row.status, days, _stale_days)
     stale_tag = (
-        f'<div class="board-stale-tag">Quiet {days} days · follow up?</div>'
+        f'<div class="board-stale-tag" title="No reply in {days} days. Time to follow up?">'
+        f'Quiet {days}d · follow up?</div>'
         if stale else ""
     )
     return (
@@ -534,8 +535,9 @@ def _render_board_cards(group: pd.DataFrame, status_name: str) -> None:
                 _move_to(app_id, nxt, row.date_applied)
                 st.rerun()
 
-        with st.popover("Change stage", width="stretch",
-                        key=f"move_{app_id}_{row.status}"):
+        b_stage, b_det = st.container(key=f"bbtn_{app_id}").columns(2)
+        with b_stage.popover("Change stage", width="stretch",
+                             key=f"move_{app_id}_{row.status}"):
             picked = st.radio(
                 f"Stage for {row.company}",
                 db.STATUSES,
@@ -556,7 +558,7 @@ def _render_board_cards(group: pd.DataFrame, status_name: str) -> None:
                 unsafe_allow_html=True,
             )
 
-        with st.popover("Contacts & notes", width="stretch", key=f"det_{app_id}"):
+        with b_det.popover("Contacts & notes", width="stretch", key=f"det_{app_id}"):
             _details_panel(row, "bd")
 
 
@@ -649,6 +651,28 @@ with tab_dash:
                     src_rows,
                     numeric_cols={1, 2},
                 ),
+                unsafe_allow_html=True,
+            )
+
+        st.subheader("How long until they reply?")
+        frd = analytics.first_response_days(df, _history_df)
+        if len(frd) < 2:
+            st.caption("Shows once at least two jobs have heard back (a screen, interview, "
+                       "offer or rejection).")
+        else:
+            st.markdown(
+                f'<p class="ats-note">Typical wait for a first reply: '
+                f'<b>{int(frd["days"].median())} days</b> '
+                f'(fastest {int(frd["days"].min())}, slowest {int(frd["days"].max())}; '
+                f'{len(frd)} jobs).</p>',
+                unsafe_allow_html=True,
+            )
+            by = (frd.groupby("source")["days"].agg(["median", "count"])
+                  .sort_values("median").reset_index())
+            st.markdown(
+                _html_table(["Source", "Typical days to reply", "Replies"],
+                            [[r.source, int(r.median), int(r.count)] for r in by.itertuples()],
+                            numeric_cols={1, 2}),
                 unsafe_allow_html=True,
             )
 
@@ -905,6 +929,9 @@ with tab_add:
         ref_name    = b.text_input("Referral name (optional)")
         ref_contact = a.text_input("Referral contact (optional)")
         follow_up   = b.date_input("Follow-up date (optional)", value=None)
+        status_on   = a.date_input("Date it reached this status (for older jobs)", value=None,
+                                   help="E.g. the day you were rejected or got the interview. "
+                                        "Leave blank for new applications.")
         notes       = st.text_area("Notes")
         if st.form_submit_button("Add application"):
             try:
@@ -913,6 +940,7 @@ with tab_add:
                     referral_name=ref_name,
                     referral_contact=ref_contact,
                     follow_up_date=str(follow_up) if follow_up else None,
+                    status_date=status_on,
                 )
                 st.success("Added!")
                 st.rerun()

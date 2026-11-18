@@ -1895,6 +1895,18 @@ button[data-testid^="stBaseButton"],
 .board-card--stale { box-shadow: inset 3px 0 0 var(--negative); }
 .board-stale-tag {
   margin-top: 8px; font-size: 0.72rem; color: var(--negative);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Card buttons: stacked in the narrow desktop columns, side by side on phones */
+[class*="st-key-bbtn_"] [data-testid="stHorizontalBlock"] {
+  flex-direction: column; gap: 0.5rem;
+}
+[class*="st-key-bbtn_"] [data-testid="stColumn"] { width: 100% !important; flex: 1 1 auto !important; }
+@media (max-width: 640px) {
+  [class*="st-key-bbtn_"] [data-testid="stHorizontalBlock"] {
+    flex-direction: row; flex-wrap: nowrap;
+  }
+  [class*="st-key-bbtn_"] [data-testid="stColumn"] { min-width: 0 !important; flex: 1 1 0 !important; }
 }
 
 /* ------------------------------------------------------------------ */

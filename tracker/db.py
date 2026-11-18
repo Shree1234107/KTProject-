@@ -192,7 +192,9 @@ def connect(path=None):
 def add_application(conn, company, role, location="", status="Applied",
                     date_applied=None, deadline=None, source="", notes="",
                     referral_name="", referral_contact="",
-                    follow_up_date=None, is_sample=False):
+                    follow_up_date=None, is_sample=False, status_date=None):
+    """status_date: for an older job, the day it reached ``status`` (e.g. the
+    rejection date). Then history shows Applied on date_applied, then status."""
     if status not in STATUSES:
         raise ValueError(f"Invalid status: {status}")
     if not company.strip() or not role.strip():
@@ -212,8 +214,12 @@ def add_application(conn, company, role, location="", status="Applied",
             1 if is_sample else 0,
         ),
     )
-    _record_status(conn, cur.lastrowid, status,
-                   date_applied if status != "Wishlist" and date_applied else None)
+    if status_date and date_applied and status not in ("Wishlist", "Applied"):
+        _record_status(conn, cur.lastrowid, "Applied", date_applied)
+        _record_status(conn, cur.lastrowid, status, status_date)
+    else:
+        _record_status(conn, cur.lastrowid, status,
+                       date_applied if status != "Wishlist" and date_applied else None)
     conn.commit()
     return cur.lastrowid
 
