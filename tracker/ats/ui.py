@@ -368,7 +368,13 @@ def _tailor_section(res: dict, conn=None) -> None:
         from tracker import db as _db
         saved = _db.get_setting(conn, "cl_model", "")
     names = [m["name"] for m in models]
-    model = saved if saved in names else next((m["name"] for m in models if not m["cloud"]), names[0])
+    default = saved if saved in names else next((m["name"] for m in models if not m["cloud"]), names[0])
+    sizes = {m["name"]: ("cloud" if m["cloud"] else f"{m['size_gb']} GB") for m in models}
+    model = st.selectbox("Model", names, index=names.index(default), key="ats_model",
+                         format_func=lambda n: f"{n} · {sizes[n]}",
+                         help="Bigger models write better; smaller ones are faster.")
+    if conn is not None and model != saved:
+        _db.set_setting(conn, "cl_model", model)
 
     missing = [kw["keyword"] for kw in res["missing_keywords"]]
     st.caption("The AI keeps your sections, layout and wording style, puts your most "
