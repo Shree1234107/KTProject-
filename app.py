@@ -43,7 +43,7 @@ _head.markdown(
     unsafe_allow_html=True,
 )
 _dark_now = styles.is_dark()
-if _mode.button("☀️ Light mode" if _dark_now else "🌙 Dark mode", key="mode_toggle",
+if _mode.button("Light mode" if _dark_now else "Dark mode", key="mode_toggle",
                 width="stretch", help="Switch between light and dark"):
     styles.set_appearance("Light" if _dark_now else "Dark")
 tab_dash, tab_board, tab_apps, tab_add, tab_rem, tab_ats, tab_cl, tab_set = st.tabs(
