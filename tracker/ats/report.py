@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import html as _html
 
-CATEGORIES = ("Technical", "Certifications", "Soft skills")
+CATEGORIES = ("Business & finance", "Technical", "Certifications", "Soft skills")
 
 # Ordered thresholds: first match wins (score >= threshold → label)
 _BANDS: tuple[tuple[float, str], ...] = (

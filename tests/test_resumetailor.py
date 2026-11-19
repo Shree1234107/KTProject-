@@ -88,5 +88,12 @@ def test_word_family_keywords_are_proven_and_added(monkeypatch):
     monkeypatch.setattr(rt.cl, "generate_with_ollama",
                         lambda *a, **k: '{"lines": ["Collaborated with the sales team on reports"]}')
     out = rt.tailor_resume("m", res, jd)
-    assert "Strengths: Collaboration" in out and "ommunication" not in out
+    assert "Relevant skills: Collaboration" in out and "ommunication" not in out
     assert rt.added_claims(out, res, jd) == []
+
+
+def test_head_noun_backing():
+    assert rt._backed_by_line("financial modeling", "Built a model in Excel comparing returns")
+    assert rt._backed_by_line("presentations", "Presented findings to 3 professors")
+    assert not rt._backed_by_line("account reconciliations", "Counted the cash drawer")
+    assert not rt._backed_by_line("quickbooks", "Kept the spreadsheet in Excel")

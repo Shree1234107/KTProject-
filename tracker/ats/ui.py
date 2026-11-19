@@ -33,6 +33,8 @@ _INPUT_MODES = ("Upload PDF", "Paste text", "Try the demo")
 # by its section heading, not by color.
 _CHIP_CLASSES: dict[tuple[str, bool], str] = {
     ("Technical", True):      "chip-m-tech",
+    ("Business & finance", True):  "chip-m-tech",
+    ("Business & finance", False): "chip-x-tech",
     ("Certifications", True): "chip-m-cert",
     ("Soft skills", True):    "chip-m-soft",
     ("Technical", False):     "chip-x-tech",

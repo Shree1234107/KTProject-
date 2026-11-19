@@ -46,16 +46,29 @@ def _numbers(text: str) -> set[str]:
 
 
 def _stem(word: str) -> str:
-    """Rough word root: "collaborated", "collaboration", "collaborate" → "collab"."""
-    w = word.lower()
-    return w[:6] if len(w) >= 7 else w
+    """Rough word root: first 5 letters ("modeling" and "model" → "model")."""
+    return word.lower()[:5]
 
 
 def _backed_by_line(term: str, line: str) -> bool:
-    """True when every word of a keyword shares a root with a word in the line
-    (e.g. "collaboration" is backed by "Collaborated")."""
-    roots = {_stem(w) for w in re.findall(r"[a-zA-Z]+", line)}
-    return all(_stem(w) in roots for w in re.findall(r"[a-zA-Z]+", term))
+    """True when the line already describes the keyword's main thing.
+
+    The keyword's last word (its head noun: "financial *modeling*") must share
+    a root with a word in the line ("Built a *model* in Excel"). Keeps the
+    claim tied to work the line already shows.
+    """
+    words = re.findall(r"[a-zA-Z]+", term)
+    if not words:
+        return False
+    roots = {_stem(w) for w in re.findall(r"[a-zA-Z]+", line) if len(w) > 2}
+    return _stem(words[-1]) in roots
+
+
+def _soft_backed(term: str, text: str, job_description: str) -> bool:
+    if term.lower() not in {t.lower() for t in soft_terms(job_description)}:
+        return False
+    roots = {_stem(w) for w in re.findall(r"[a-zA-Z]+", text)}
+    return any(_stem(w) in roots for w in re.findall(r"[a-zA-Z]+", term) if len(w) > 3)
 
 
 def soft_terms(job_description: str) -> list[str]:
@@ -75,9 +88,8 @@ def bullet_ok(new: str, old: str, job_description: str, confirmed: list[str]) ->
     old_words = set(re.findall(r"[a-z]+", old.lower()))
     if any(w in re.findall(r"[a-z]+", new.lower()) and w not in old_words for w in _INFLATE):
         return False
-    soft = {t.lower() for t in soft_terms(job_description)}
     extra = cl.unbacked_skills(new, old + "\n" + "\n".join(confirmed), job_description)
-    return all(t.lower() in soft or _backed_by_line(t, old) for t in extra)
+    return all(_backed_by_line(t, old) or _soft_backed(t, old, job_description) for t in extra)
 
 
 def _rewrite_lines(model: str, lines: list[str], job_description: str,
@@ -90,9 +102,22 @@ def _rewrite_lines(model: str, lines: list[str], job_description: str,
     gap_terms = [g["keyword"] for g in gaps
                  if g.get("category") == "Soft skills" or g["keyword"] in [c.lower() for c in confirmed]
                  or any(_backed_by_line(g["keyword"], l) for l in lines)]
+    hints = {}
+    from tracker.ats.keywords import extract_keywords as _ek
+    from tracker.ats.extractor import clean_text as _ct
+    _wanted = [k["keyword"] for k in _ek(_ct(job_description))]
+    for n, l in enumerate(lines):
+        use = [cl._as_written(k, job_description) for k in _wanted
+               if k not in l.lower() and (_backed_by_line(k, l) or _soft_backed(k, l, job_description))]
+        if use:
+            hints[n + 1] = use
+    hint_text = "".join(f"- Line {n}: use the words " + ", ".join(f'"{u}"' for u in us) + "\n"
+                        for n, us in hints.items())
     prompt = (
         "Rewrite each resume line below so it fits the job posting better.\n"
-        "Rules:\n"
+        + ("REQUIRED keyword swaps (these lines already describe this work, so use the "
+           "posting's exact words for it):\n" + hint_text if hint_text else "")
+        + "Rules:\n"
         "- One output line per input line, same order, same count.\n"
         "- Keep the meaning, every number, and every tool or product name. Never add "
         "a tool, skill, number, employer or result that the line doesn't already say.\n"
@@ -163,10 +188,11 @@ def tailor_resume(model: str, resume: str, job_description: str,
     wanted = extract_keywords(clean_text(job_description))
     _, gaps = keywords_in_text(clean_text(text), wanted)
     proven = [g["keyword"] for g in gaps
-              if any(_backed_by_line(g["keyword"], l) for l in lines if not _is_heading(l))]
+              if any(_backed_by_line(g["keyword"], l) or _soft_backed(g["keyword"], l, job_description)
+                     for l in lines if not _is_heading(l) and not l.strip().upper().startswith("GPA"))]
     proven = [cl._as_written(k, job_description).capitalize() if k.islower() else k for k in proven]
     text = add_skills(text, confirmed)
-    return add_skills(text, proven, label="Strengths")
+    return add_skills(text, proven, label="Relevant skills")
 
 
 def add_skills(text: str, skills: list[str], label: str = "") -> str:
@@ -199,7 +225,7 @@ def added_claims(new: str, original: str, job_description: str,
     backed = original + "\n" + "\n".join(confirmed or [])
     lines = [l for l in original.splitlines() if l.strip()]
     return [t for t in cl.unbacked_skills(new, backed, job_description)
-            if not any(_backed_by_line(t, l) for l in lines)]
+            if not any(_backed_by_line(t, l) or _soft_backed(t, l, job_description) for l in lines)]
 
 
 def to_docx(text: str) -> bytes:

@@ -25,6 +25,7 @@ _SECTION_TO_CATEGORY: dict[str, str] = {
     "tech_skills": "Technical",
     "soft_skills": "Soft skills",
     "certifications": "Certifications",
+    "business_skills": "Business & finance",
 }
 
 
