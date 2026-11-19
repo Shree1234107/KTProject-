@@ -311,25 +311,64 @@ def voice_block(voice: str) -> str:
     return f"\nMY WRITING SAMPLE (style only):\n{voice.strip()[:3000]}\n" if voice.strip() else ""
 
 
+def _wants_shorter(request: str) -> bool:
+    return bool(re.search(r"\b(short|shorter|cut|trim|concise|condense|brief|fewer|less wordy|tighten)", request, re.I))
+
+
+def _wants_new_content(request: str) -> bool:
+    return bool(re.search(r"\b(add|mention|include|talk about|bring up|highlight|use my|more about)", request, re.I))
+
+
+def _words(text: str) -> int:
+    return len(text.split())
+
+
 def revise_letter(model: str, letter: str, request: str, resume: str,
                   job_description: str, voice: str = "") -> str:
-    """Rewrite a letter following the user's instructions, staying honest."""
-    prompt = (
-        "Revise my cover letter following MY REQUEST.\n\n"
-        "Rules:\n"
-        "- Do exactly what MY REQUEST asks. Keep everything else that already works.\n"
-        "- Keep the header, greeting and sign-off lines unless the request is about them.\n"
-        "- Only use experience that is in MY RESUME. Never invent jobs, numbers, courses, "
-        "tools or skills, even if the request asks for them; leave those out.\n"
-        + style_rules(resume, job_description, voice) +
-        "- Output only the full revised letter. No notes, no markdown.\n\n"
-        f"MY REQUEST:\n{request.strip()[:1500]}\n\n"
-        f"MY LETTER:\n{letter.strip()[:6000]}\n"
-        + voice_block(voice) +
-        f"\nMY RESUME:\n{resume.strip()[:5000]}\n\n"
-        f"JOB DESCRIPTION:\n{job_description.strip()[:5000]}\n"
-    )
-    return generate_with_ollama(model, prompt, temperature=0.5)
+    """Edit the letter to do what the user asked, and nothing else.
+
+    Small models tend to rewrite and pad the whole letter, so this is framed as
+    a strict edit: the request leads and closes the prompt, the job posting is
+    left out, and the resume is only included (as a fact source) when the
+    request asks to add something. A "shorter" request is retried once if the
+    result didn't actually get shorter.
+    """
+    n = _words(letter)
+    shorter = _wants_shorter(request)
+    m = re.search(r"(\d{2,4})\s*words", request)
+    target = int(m.group(1)) if m else (int(n * 0.7) if shorter else None)
+    rules = [
+        "Make ONLY the change I ask for. Leave every other sentence as close to the "
+        "original as possible.",
+        "Do not add new skills, tools, numbers, jobs or claims"
+        + (" except facts taken word for word from MY RESUME." if _wants_new_content(request) else "."),
+        "Keep the greeting line and the sign-off with my name.",
+        "Avoid cliches like 'I am excited to', 'passionate about', 'strong fit'.",
+        "Output only the full revised letter. No notes, no markdown, no explanation.",
+    ]
+    if target:
+        rules.insert(1, f"The revised letter must be about {target} words or fewer "
+                        f"(it is {n} words now).")
+    if voice.strip():
+        rules.append("Match the tone of MY WRITING SAMPLE.")
+
+    def ask(extra: str = "") -> str:
+        prompt = (
+            f"MY REQUEST: {request.strip()[:1200]}\n\n"
+            "Edit my cover letter to do exactly that.\nRules:\n"
+            + "".join(f"- {r}\n" for r in rules) + extra
+            + f"\nMY LETTER:\n{letter.strip()[:6000]}\n"
+            + (f"\nMY RESUME (facts only):\n{resume.strip()[:4000]}\n" if _wants_new_content(request) else "")
+            + voice_block(voice)
+            + f"\nREMEMBER, MY REQUEST: {request.strip()[:600]}\nRevised letter:\n"
+        )
+        return generate_with_ollama(model, prompt, temperature=0.3)
+
+    out = ask()
+    if target and _words(out) > target * 1.15:
+        out = ask(f"- Your last try was {_words(out)} words. That is too long. "
+                  f"Cut sentences until it is under {target} words.\n")
+    return out
 
 
 def build_prompt(resume: str, job_description: str, template: str,

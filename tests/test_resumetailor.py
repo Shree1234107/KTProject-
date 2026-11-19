@@ -61,3 +61,20 @@ def test_style_rules_and_voice():
     r = cl.style_rules(RESUME, JD, voice="short sentences")
     assert "Python" in r and "MY VOICE" in r and "passionate" in r
     assert "MY VOICE" not in cl.style_rules(RESUME, JD)
+
+
+def test_revise_is_a_strict_edit(monkeypatch):
+    from tracker import coverletter as cl
+    seen = []
+    def fake(model, prompt, **kw):
+        seen.append(prompt)
+        return "word " * (200 if len(seen) == 1 else 40)
+    monkeypatch.setattr(cl, "generate_with_ollama", fake)
+    letter = "Dear X,\n\n" + "word " * 100 + "\n\nSincerely,\nJ"
+    out = cl.revise_letter("m", letter, "make it shorter", RESUME, JD)
+    assert len(seen) == 2 and len(out.split()) == 40           # retried when too long
+    assert seen[0].startswith("MY REQUEST: make it shorter")
+    assert "REMEMBER, MY REQUEST" in seen[0] and "JOB" not in seen[0] and "MY RESUME" not in seen[0]
+    seen.clear()
+    cl.revise_letter("m", letter, "mention my Excel charts", RESUME, JD)
+    assert "MY RESUME (facts only)" in seen[0]
