@@ -1339,6 +1339,20 @@ with tab_cl:
     elif not models:
         st.caption("To write with AI, install and open Ollama (free, ollama.com), then reload this page.")
 
+    voice = db.get_setting(conn, "cl_voice", "")
+    if way.startswith("Write with AI"):
+        with st.expander("Make it sound like me" + (" · sample saved" if voice.strip() else "")):
+            st.caption("Paste something you wrote yourself: an old cover letter, an essay, "
+                       "a LinkedIn post. The AI copies your tone and wording, not the facts.")
+            _v = st.text_area("Your writing sample", value=voice, height=160,
+                              key="cl_voice_in", label_visibility="collapsed")
+            if _v != voice:
+                db.set_setting(conn, "cl_voice", _v)
+                voice = _v
+        _terms = cl.shared_skills(resume_text, jd, limit=10)
+        if _terms:
+            st.caption("Posting keywords it will work in (you have these): " + ", ".join(_terms))
+
     if st.button("Write cover letter", type="primary", key="cl_go"):
         use_ai = way.startswith("Write with AI")
         # Company/role left blank: read them from the pasted posting.
@@ -1369,7 +1383,7 @@ with tab_cl:
                 with st.spinner(f"Writing with {model}… this can take a minute or two."):
                     try:
                         st.session_state["cl_draft"] = cl.write_letter_from_template(
-                            model, resume_text, jd, template, company, role, manager)
+                            model, resume_text, jd, template, company, role, manager, voice)
                     except RuntimeError as e:
                         st.error(f"Ollama couldn't write the letter: {e}")
                         ok = False
@@ -1397,6 +1411,32 @@ with tab_cl:
                 + ", which " + ("isn't" if len(unbacked) == 1 else "aren't")
                 + " on your resume. Remove it or add it to your resume if it's true."
             )
+        if models:
+            with st.expander("Ask the AI to make it stronger"):
+                _req = st.text_area(
+                    "What should change?", key="cl_req", height=90,
+                    placeholder="e.g. Make the opening less generic, mention my data project "
+                                "first, cut it to 250 words, sound more confident",
+                )
+                r1, r2 = st.columns([1, 1])
+                if r1.button("Revise letter", key="cl_rev", disabled=not _req.strip(),
+                             width="stretch"):
+                    _m = model or next((m["name"] for m in models if not m["cloud"]), models[0]["name"])
+                    with st.spinner(f"Revising with {_m}…"):
+                        try:
+                            _new = cl.revise_letter(_m, draft, _req, resume_text, jd, voice)
+                        except RuntimeError as e:
+                            st.error(f"Ollama couldn't revise it: {e}")
+                        else:
+                            st.session_state["cl_prev"] = draft
+                            st.session_state["cl_draft"] = _new
+                            st.session_state.pop("cl_edit", None)
+                            st.rerun()
+                if st.session_state.get("cl_prev") and r2.button(
+                        "Undo last revision", key="cl_undo", width="stretch"):
+                    st.session_state["cl_draft"] = st.session_state.pop("cl_prev")
+                    st.session_state.pop("cl_edit", None)
+                    st.rerun()
         co, ro = st.session_state.get("cl_for", (company, role))
         _tpl_docx = db.get_setting(conn, "cl_template_docx", "")
         d1, d2, d3 = st.columns(3)

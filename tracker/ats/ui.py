@@ -165,6 +165,8 @@ def _render_results(res: dict, conn=None) -> None:
         "misrepresenting experience can backfire in technical interviews."
     )
 
+    _tailor_section(res, conn)
+
     # --- Download ---
     md_report = report.build_report(res)
     st.download_button(
@@ -311,6 +313,8 @@ def render(conn=None) -> None:
                     if pdf_file is None:
                         raise ValueError("Please upload a resume PDF.")
                     result = ats.analyze(pdf_file.getvalue(), jd_text)
+                    from tracker.ats.extractor import extract_text_from_pdf
+                    st.session_state["ats_resume_text"] = extract_text_from_pdf(pdf_file.getvalue())
                     st.session_state["ats_resume_label"] = pdf_file.name
                 elif mode == "Paste text":
                     if len(paste_text.strip()) < ats.MIN_RESUME_CHARS:
@@ -319,9 +323,11 @@ def render(conn=None) -> None:
                             f"paste at least {ats.MIN_RESUME_CHARS} characters of your resume."
                         )
                     result = ats.analyze_text(paste_text, jd_text)
+                    st.session_state["ats_resume_text"] = paste_text
                     st.session_state["ats_resume_label"] = "pasted text"
                 else:  # demo
                     result = ats.analyze_text(ats.sample_resume_text(), jd_text)
+                    st.session_state["ats_resume_text"] = ats.sample_resume_text()
                     st.session_state["ats_resume_label"] = "demo resume"
             except ValueError as exc:
                 error_msg = str(exc)
@@ -331,7 +337,9 @@ def render(conn=None) -> None:
             st.session_state["ats_error"] = error_msg
         else:
             st.session_state["ats_result"] = result
+            st.session_state["ats_jd_used"] = jd_text
             st.session_state.pop("ats_error", None)
+            st.session_state.pop("ats_tailored", None)
 
     # --- Show persisted error ---
     if err := st.session_state.get("ats_error"):
@@ -340,3 +348,73 @@ def render(conn=None) -> None:
     # --- Show persisted results ---
     if res := st.session_state.get("ats_result"):
         _render_results(res, conn)
+
+
+def _tailor_section(res: dict, conn=None) -> None:
+    """AI rewrite of the resume for this posting, using only what's true."""
+    from tracker import coverletter as cl, resumetailor as rt
+    resume = st.session_state.get("ats_resume_text", "")
+    jd = st.session_state.get("ats_jd_used", "")
+    st.subheader("Tailor my resume to this job")
+    models = cl.ollama_models()
+    if not models:
+        st.caption("To rewrite with AI, open Ollama (free, ollama.com), then reload this page.")
+        return
+    if not resume.strip() or not jd.strip():
+        st.caption("Run Analyze first.")
+        return
+    saved = ""
+    if conn is not None:
+        from tracker import db as _db
+        saved = _db.get_setting(conn, "cl_model", "")
+    names = [m["name"] for m in models]
+    model = saved if saved in names else next((m["name"] for m in models if not m["cloud"]), names[0])
+
+    missing = [kw["keyword"] for kw in res["missing_keywords"]]
+    st.caption("The AI keeps your sections, layout and wording style, puts your most "
+               "relevant experience first and uses the posting's words for it. It won't "
+               "add anything you haven't done.")
+    confirmed = st.multiselect(
+        "Missing keywords you really do have (only these get added)", missing,
+        key="ats_confirmed",
+        help="Leave a keyword out if you can't back it up in an interview.",
+    ) if missing else []
+    request = st.text_area(
+        "Anything else to change? (optional)", key="ats_req", height=80,
+        placeholder="e.g. Lead with my research job, shorten to one page, stronger verbs",
+    )
+    draft = st.session_state.get("ats_tailored", "")
+    b1, b2, _ = st.columns([1, 1, 2])
+    go = b1.button("Rewrite my resume" if not draft else "Start over", type="primary",
+                   key="ats_tailor", width="stretch")
+    again = draft and b2.button("Revise this draft", key="ats_tailor_rev", width="stretch",
+                                disabled=not request.strip())
+    if go or again:
+        with st.spinner(f"Rewriting with {model}… this can take a minute or two."):
+            try:
+                st.session_state["ats_tailored"] = rt.tailor_resume(
+                    model, resume, jd, confirmed, request, current=draft if again else "")
+            except RuntimeError as e:
+                st.error(f"Ollama couldn't rewrite it: {e}")
+            else:
+                st.session_state.pop("ats_tailored_edit", None)
+                st.rerun()
+    if not draft:
+        return
+    text = st.text_area("Tailored resume (edit anything)", value=draft, height=420,
+                        key="ats_tailored_edit")
+    extra = rt.added_claims(text, resume, jd, confirmed)
+    if extra:
+        st.warning("Check before using: this mentions " + ", ".join(extra)
+                   + ", which isn't on your original resume. Remove it unless it's true.")
+    try:
+        new_score = ats.analyze_text(text, jd)["overall_score"]
+        st.caption(f"Match score: {res['overall_score']:.0f} before → **{new_score:.0f}** after")
+    except ValueError:
+        pass
+    d1, d2, _ = st.columns([1, 1, 2])
+    d1.download_button("Download Word", data=rt.to_docx(text), file_name="tailored-resume.docx",
+                       mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                       key="ats_tl_docx", width="stretch")
+    d2.download_button("Download text", data=text.encode(), file_name="tailored-resume.txt",
+                       mime="text/plain", key="ats_tl_txt", width="stretch")

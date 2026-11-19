@@ -285,8 +285,56 @@ def ollama_models(timeout: float = 2.0) -> list[dict]:
     return out
 
 
+_CLICHES = ("I am excited to", "I am thrilled", "passionate about", "leverage",
+            "dynamic", "fast-paced", "synergy", "I believe I would be a great fit",
+            "hit the ground running", "team player")
+
+
+def style_rules(resume: str, job_description: str, voice: str = "") -> str:
+    """Prompt rules that make the letter sound like the user and use the posting's words."""
+    terms = shared_skills(resume, job_description, limit=10)
+    out = []
+    if terms:
+        out.append("- Use these exact words from the job posting, each where it truthfully "
+                   "fits my experience: " + ", ".join(terms) + ".")
+    out.append("- Reuse the posting's own phrasing for what the team does, instead of "
+               "generic praise for the company.")
+    out.append("- Sound like a real person, not a template. Avoid: "
+               + "; ".join(f"'{c}'" for c in _CLICHES) + ".")
+    if voice.strip():
+        out.append("- Write in MY VOICE: copy the sentence length, word choice, tone and "
+                   "level of formality of MY WRITING SAMPLE. Do not copy its facts.")
+    return "\n".join(out) + "\n"
+
+
+def voice_block(voice: str) -> str:
+    return f"\nMY WRITING SAMPLE (style only):\n{voice.strip()[:3000]}\n" if voice.strip() else ""
+
+
+def revise_letter(model: str, letter: str, request: str, resume: str,
+                  job_description: str, voice: str = "") -> str:
+    """Rewrite a letter following the user's instructions, staying honest."""
+    prompt = (
+        "Revise my cover letter following MY REQUEST.\n\n"
+        "Rules:\n"
+        "- Do exactly what MY REQUEST asks. Keep everything else that already works.\n"
+        "- Keep the header, greeting and sign-off lines unless the request is about them.\n"
+        "- Only use experience that is in MY RESUME. Never invent jobs, numbers, courses, "
+        "tools or skills, even if the request asks for them; leave those out.\n"
+        + style_rules(resume, job_description, voice) +
+        "- Output only the full revised letter. No notes, no markdown.\n\n"
+        f"MY REQUEST:\n{request.strip()[:1500]}\n\n"
+        f"MY LETTER:\n{letter.strip()[:6000]}\n"
+        + voice_block(voice) +
+        f"\nMY RESUME:\n{resume.strip()[:5000]}\n\n"
+        f"JOB DESCRIPTION:\n{job_description.strip()[:5000]}\n"
+    )
+    return generate_with_ollama(model, prompt, temperature=0.5)
+
+
 def build_prompt(resume: str, job_description: str, template: str,
-                 company: str, role: str, hiring_manager: str = "") -> str:
+                 company: str, role: str, hiring_manager: str = "",
+                 voice: str = "") -> str:
     fields = fields_for(company, role, hiring_manager)
     return (
         "Write a cover letter for the job below.\n\n"
@@ -299,6 +347,7 @@ def build_prompt(resume: str, job_description: str, template: str,
         "claim it, not even 'familiarity'. Leave it out.\n"
         "- Don't state my class year (senior, junior...) or where I found the "
         "posting. Don't add any fact that isn't in MY RESUME or the JOB DESCRIPTION.\n"
+        + style_rules(resume, job_description, voice) +
         f"- Address it to {fields['{hiring_manager}']} and date it {fields['{date}']}.\n"
         "- Output only the letter text. No notes, no markdown, no subject line "
         "unless my template has one.\n\n"
@@ -306,6 +355,7 @@ def build_prompt(resume: str, job_description: str, template: str,
         f"MY TEMPLATE:\n{template.strip()}\n\n"
         f"MY RESUME:\n{resume.strip()[:6000]}\n\n"
         f"JOB DESCRIPTION:\n{job_description.strip()[:6000]}\n"
+        + voice_block(voice)
     )
 
 
@@ -381,7 +431,7 @@ def _fill_lines_with_ai(model: str, lines: list[str], resume: str) -> list[str]:
 
 def write_letter_from_template(model: str, resume: str, job_description: str,
                                template: str, company: str, role: str,
-                               hiring_manager: str = "") -> str:
+                               hiring_manager: str = "", voice: str = "") -> str:
     """AI letter that keeps the template's header, greeting and sign-off.
 
     The model writes only the body paragraphs (as many as the template has);
@@ -392,7 +442,7 @@ def write_letter_from_template(model: str, resume: str, job_description: str,
     parts = split_template(fill_template(template, fields_for(company, role, hiring_manager)))
     if parts is None:
         return generate_with_ollama(model, build_prompt(
-            resume, job_description, template, company, role, hiring_manager))
+            resume, job_description, template, company, role, hiring_manager, voice))
 
     n = parts["paragraphs"]
     body_prompt = (
@@ -407,11 +457,13 @@ def write_letter_from_template(model: str, resume: str, job_description: str,
         "- Don't describe my class year with a word like 'senior' or 'junior'. You "
         "may give my expected graduation date exactly as my resume states it.\n"
         "- Don't say where I found the posting.\n"
+        + style_rules(resume, job_description, voice) +
         "- No greeting, no sign-off, no name, no headings, no markdown. Only the "
         f"{n} paragraphs.\n\n"
         f"TEMPLATE BODY:\n{parts['body'][:4000]}\n\n"
         f"MY RESUME:\n{resume.strip()[:5000]}\n\n"
         f"JOB DESCRIPTION:\n{job_description.strip()[:5000]}\n"
+        + voice_block(voice)
     )
     body = generate_with_ollama(model, body_prompt)
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
