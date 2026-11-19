@@ -1436,6 +1436,16 @@ with tab_cl:
 # Settings — weekly target, sample data, clear all
 # ---------------------------------------------------------------------------
 with tab_set:
+    st.subheader("Appearance")
+    _look_now = "Dark" if styles.is_dark() else "Light"
+    _look = st.segmented_control(
+        "Theme", ["Light", "Dark", "Match my Mac"], default=_look_now,
+        key="look_pick", help="Saved in this browser.",
+    )
+    if _look and _look != _look_now and not (_look == "Match my Mac" and st.session_state.get("look_sys")):
+        st.session_state["look_sys"] = _look == "Match my Mac"
+        styles.set_appearance("System" if _look == "Match my Mac" else _look)
+
     st.subheader("Weekly goal")
     goal_now = int(db.get_setting(conn, "weekly_goal", "10"))
     new_goal = st.number_input(

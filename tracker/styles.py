@@ -28,6 +28,47 @@ TOKENS = {
     "serif": 'Georgia, "Times New Roman", serif',
     "sans": 'system-ui, -apple-system, "Segoe UI", sans-serif',
 }
+LIGHT_TOKENS = dict(TOKENS)
+
+# Dark mode: same warm olive look, inverted. Used when the viewer picks Dark.
+DARK_TOKENS = {
+    **LIGHT_TOKENS,
+    "page_bg": "#1C1D19",
+    "surface": "#252621",
+    "surface_muted": "#2E302A",
+    "text": "#ECE9E1",
+    "muted": "#A9A69C",
+    "rule": "#3A3C35",
+    "olive": "#A7B596",
+    "olive_hover": "#BCC8AC",
+    "olive_mid": "#7E8A73",
+    "olive_light": "#4A5341",
+    "negative": "#D29A80",
+}
+
+DARK_CSS = r"""
+:root {
+  --page-bg:       #1C1D19;
+  --surface:       #252621;
+  --surface-muted: #2E302A;
+  --surface-hover: #2A2C26;
+  --border:        #3A3C35;
+  --text-primary:   #ECE9E1;
+  --text-secondary: #A9A69C;
+  --accent:       #A7B596;
+  --accent-hover: #BCC8AC;
+  --accent-soft:  #343B2E;
+  --accent-faint: #2A2F25;
+  --olive-mid:    #7E8A73;
+  --olive-light:  #4A5341;
+  --negative:     #D29A80;
+  --accent-line:  #48523F;
+  --accent-mid:   #A7B596;
+  --accent-deep:  #D6DEC9;
+  color-scheme: dark;
+}
+.stage-tag-failed { background: #3A2A24; color: #E3B7A4; border-color: #5A3D32; }
+"""
 
 CSS = r"""
 /* ================================================================
@@ -1999,5 +2040,32 @@ def setup() -> None:
     ``st.altair_chart(chart, theme=None)`` so Streamlit's own chart theme
     doesn't override this one.
     """
+    dark = is_dark()
+    TOKENS.clear()
+    TOKENS.update(DARK_TOKENS if dark else LIGHT_TOKENS)
     _register_altair_theme()
-    st.markdown(f"<style>{CSS}</style>", unsafe_allow_html=True)
+    st.markdown(f"<style>{CSS}{DARK_CSS if dark else ''}</style>", unsafe_allow_html=True)
+
+
+def is_dark() -> bool:
+    """True when the page is showing Streamlit's dark theme."""
+    try:
+        return st.context.theme.type == "dark"
+    except Exception:
+        return False
+
+
+def set_appearance(choice: str) -> None:
+    """Save "Light", "Dark" or "System" in this browser and reload the page.
+
+    Streamlit keeps the viewer's theme choice in the browser's localStorage;
+    this writes the same key its own menu uses, then reloads to apply it.
+    """
+    import json
+    import streamlit.components.v1 as components
+    components.html(
+        "<script>const w=window.parent;"
+        "w.localStorage.setItem('stActiveTheme-'+w.location.pathname+'-v2',"
+        f"{json.dumps(json.dumps(choice))});w.location.reload();</script>",
+        height=0,
+    )

@@ -5,12 +5,22 @@ maxUploadSize = 5
 toolbarMode = "minimal"
 
 [theme]
-base            = "light"
+font = "sans serif"
+
+[theme.light]
 primaryColor    = "#4E5947"
 backgroundColor = "#F6F3ED"
 secondaryBackgroundColor = "#EEEAE2"
 textColor       = "#292923"
-font            = "sans serif"
 borderColor     = "#E3DED5"
 dataframeBorderColor = "#E3DED5"
 dataframeHeaderBackgroundColor = "#FCFBF8"
+
+[theme.dark]
+primaryColor    = "#A7B596"
+backgroundColor = "#1C1D19"
+secondaryBackgroundColor = "#2E302A"
+textColor       = "#ECE9E1"
+borderColor     = "#3A3C35"
+dataframeBorderColor = "#3A3C35"
+dataframeHeaderBackgroundColor = "#252621"
