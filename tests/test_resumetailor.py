@@ -78,3 +78,15 @@ def test_revise_is_a_strict_edit(monkeypatch):
     seen.clear()
     cl.revise_letter("m", letter, "mention my Excel charts", RESUME, JD)
     assert "MY RESUME (facts only)" in seen[0]
+
+
+def test_word_family_keywords_are_proven_and_added(monkeypatch):
+    jd = "Strong collaboration and communication skills. Python and SQL required for this role."
+    res = "SKILLS\nPython\n\nEXPERIENCE\n- Collaborated with the sales team on reports"
+    assert rt._backed_by_line("collaboration", "Collaborated with the sales team")
+    assert not rt._backed_by_line("communication", "Collaborated with the sales team")
+    monkeypatch.setattr(rt.cl, "generate_with_ollama",
+                        lambda *a, **k: '{"lines": ["Collaborated with the sales team on reports"]}')
+    out = rt.tailor_resume("m", res, jd)
+    assert "Strengths: Collaboration" in out and "ommunication" not in out
+    assert rt.added_claims(out, res, jd) == []

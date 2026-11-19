@@ -414,8 +414,16 @@ def _tailor_section(res: dict, conn=None) -> None:
         st.warning("Check before using: this mentions " + ", ".join(extra)
                    + ", which isn't on your original resume. Remove it unless it's true.")
     try:
-        new_score = ats.analyze_text(text, jd)["overall_score"]
+        new_res = ats.analyze_text(text, jd)
+        new_score = new_res["overall_score"]
         st.caption(f"Match score: {res['overall_score']:.0f} before → **{new_score:.0f}** after")
+        before = {k["keyword"] for k in res["matched_keywords"]}
+        gained = [k["keyword"] for k in new_res["matched_keywords"] if k["keyword"] not in before]
+        still = [k["keyword"] for k in new_res["missing_keywords"]]
+        if gained:
+            st.caption("Posting keywords now on your resume: " + ", ".join(gained))
+        if still:
+            st.caption("Still missing (add only if true, using the box above): " + ", ".join(still))
     except ValueError:
         pass
     d1, d2, _ = st.columns([1, 1, 2])
