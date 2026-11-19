@@ -7,7 +7,7 @@ import html as _html
 import pandas as pd
 import streamlit as st
 
-from tracker import analytics, charts, coverletter as cl, db, ics as _ics, macreminders as mac, styles
+from tracker import analytics, assistant, charts, coverletter as cl, db, ics as _ics, macreminders as mac, styles
 from tracker.ats import report as _ats_report
 from tracker.ats import ui as ats_ui
 from tracker.tiles import goal_line_html, stat_tile_html
@@ -46,9 +46,9 @@ _dark_now = styles.is_dark()
 if _mode.button("Light mode" if _dark_now else "Dark mode", key="mode_toggle",
                 width="stretch", help="Switch between light and dark"):
     styles.set_appearance("Light" if _dark_now else "Dark")
-tab_dash, tab_board, tab_apps, tab_add, tab_rem, tab_ats, tab_cl, tab_set = st.tabs(
+tab_dash, tab_board, tab_apps, tab_add, tab_rem, tab_ats, tab_cl, tab_chat, tab_set = st.tabs(
     ["Dashboard", "Board", "Applications", "Add", "Reminders", "Resume Matcher",
-     "Cover Letter", "Settings"]
+     "Cover Letter", "Assistant", "Settings"]
 )
 
 df = db.load_applications(conn)
@@ -1476,6 +1476,69 @@ with tab_cl:
                 db.save_letter(conn, new_id, draft)
                 st.toast(f"Added {co} — {ro} to your Wishlist and saved the letter.")
                 st.rerun()
+
+# ---------------------------------------------------------------------------
+# Assistant — chatbot that knows your search (runs on Ollama, no API key)
+# ---------------------------------------------------------------------------
+with tab_chat:
+    st.subheader("Career Assistant")
+    st.caption(
+        "Ask about your applications, what to follow up on, interview prep or "
+        "networking messages. It reads your tracker, and it runs on this computer "
+        "through Ollama, so nothing leaves your Mac."
+    )
+
+    # The whole conversation lives in session_state as a list of
+    # {"role": "user" | "assistant", "content": text}, so it survives reruns.
+    if "chat_messages" not in st.session_state:
+        st.session_state.chat_messages = []
+
+    chat_models = [m for m in cl.ollama_models() if not m["cloud"]]
+    if not chat_models:
+        st.info("Open the Ollama app (free, ollama.com) and reload this page to chat.")
+    else:
+        names = [m["name"] for m in chat_models]
+        saved = db.get_setting(conn, "cl_model", "")
+        c1, c2 = st.columns([3, 1], vertical_alignment="bottom")
+        chat_model = c1.selectbox(
+            "Model", names, index=names.index(saved) if saved in names else 0,
+            format_func=lambda n: f"{n} · {next(m['size_gb'] for m in chat_models if m['name'] == n)} GB",
+            key="chat_model",
+        )
+        # Clear chat: empty the history and rerun so the page redraws empty.
+        if c2.button("Clear chat", key="chat_clear", width="stretch",
+                     disabled=not st.session_state.chat_messages):
+            st.session_state.chat_messages = []
+            st.rerun()
+
+        if not st.session_state.chat_messages:
+            st.caption("Try: \"What should I do this week?\" · \"Help me prep for my "
+                       "Mansfield interview\" · \"Write a short thank-you note\"")
+
+        # The conversation goes in this box, drawn above the input box.
+        # st.chat_message gives user and assistant messages their own avatar and style.
+        convo = st.container()
+        for msg in st.session_state.chat_messages:
+            with convo.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+        prompt = st.chat_input("Ask Career Assistant…", key="chat_in")
+        if prompt:
+            st.session_state.chat_messages.append({"role": "user", "content": prompt})
+            with convo.chat_message("user"):
+                st.markdown(prompt)
+            # System prompt is rebuilt each time, so it always has the latest data.
+            system = assistant.system_prompt(df, db.load_tasks(conn))
+            messages = assistant.build_messages(system, st.session_state.chat_messages)
+            with convo.chat_message("assistant"):
+                try:
+                    reply = st.write_stream(assistant.stream_reply(chat_model, messages))
+                except RuntimeError as e:
+                    reply = None
+                    st.error(str(e))
+            if reply:
+                st.session_state.chat_messages.append({"role": "assistant", "content": reply})
+                st.rerun()  # redraw so the Clear button and hint update
 
 # ---------------------------------------------------------------------------
 # Settings — weekly target, sample data, clear all

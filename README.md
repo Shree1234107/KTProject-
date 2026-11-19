@@ -11,6 +11,39 @@ streamlit run app.py
 ```
 Data is stored locally in `data/tracker.db` (git-ignored, never commit it). To pick up a teammate's latest work, run `git pull` before each session.
 
+## Career Assistant (chatbot)
+
+The **Assistant** tab is a chatbot that helps with your internship search: what to
+follow up on, interview prep, thank-you notes and networking messages. It reads
+your tracker (applications, statuses, deadlines, to-dos), so answers are about
+*your* search.
+
+**How it works**
+- `st.chat_input` takes your message; `st.chat_message` shows user and assistant
+  messages with different avatars.
+- The conversation is stored in `st.session_state.chat_messages` as a list of
+  `{"role": ..., "content": ...}` dictionaries, so it survives reruns.
+- Each turn, `tracker/assistant.py` builds a system prompt (the coach's
+  instructions + a summary of your tracker) and sends it with the conversation
+  to a language model running in [Ollama](https://ollama.com) on your computer.
+  The reply streams in as it's written.
+- **Clear chat** resets the history.
+
+**No API key needed:** the model runs locally through Ollama, so there is no key to
+store or leak. If Ollama runs somewhere other than `http://localhost:11434`, set the
+`OLLAMA_URL` environment variable instead of editing the code.
+
+**Run it**
+1. Install Ollama from ollama.com and download a model:
+   ```bash
+   ollama pull qwen3:8b      # better answers, 5.2 GB
+   ollama pull llama3.2:3b   # faster, 2 GB
+   ```
+2. Start the app and open the **Assistant** tab:
+   ```bash
+   python -m streamlit run app.py
+   ```
+
 ## Look and feel
 
 **Palette — whites and blues only:**
